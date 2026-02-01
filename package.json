@@ -1,0 +1,79 @@
+{
+  "name": "mmm-media-manager-pro",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Complete Product Specification - Professional Media Management",
+  "author": "Menelek Makonnen (ICUNI Group)",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite --force",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:9797 && electron .\"",
+    "electron:build": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.icunigroup.mmmdmgrpro",
+    "productName": "MMM Media Manager Pro",
+    "executableName": "MMM-Media-Manager-Pro",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/icon.png"
+    ],
+    "icon": "public/icon.png",
+    "win": {
+      "target": [
+        "nsis",
+        "portable",
+        "zip"
+      ],
+      "icon": "public/icon.png",
+      "publisherName": "ICUNI Group"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MMM Media Manager Pro",
+      "uninstallDisplayName": "MMM Media Manager Pro Uninstall"
+    }
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.18.2",
+    "idb-keyval": "^6.2.2",
+    "lucide-react": "^0.469.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-resizable-panels": "^3.0.6",
+    "react-virtualized-auto-sizer": "^1.0.26",
+    "react-window": "^2.2.3",
+    "tailwind-merge": "^2.6.0",
+    "zustand": "5.0.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "electron": "39.2.7",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "globals": "^15.14.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "3.4.17",
+    "vite": "7.3.0",
+    "wait-on": "^8.0.1"
+  }
+}
