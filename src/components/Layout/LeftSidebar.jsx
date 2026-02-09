@@ -2,9 +2,12 @@ import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import { FolderOpen, Folder, ChevronRight, ChevronDown, List, Grid, Search, RefreshCw, BarChart2, Clock, History, Film, Image as ImageIcon, Zap, Plus, XOctagon } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
 import { clearThumbnailCache, getCachedUrl, getThumbnailUrl } from '../../utils/thumbnailCache';
-import { getSavedFolderHandle, verifyPermission } from '../../utils/persistence';
+import { getSavedFolderHandle, verifyPermission, getRecentLibraries } from '../../utils/persistence';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// ... (FolderTreeItem remains unchanged, but omit for brevity in replace call if possible, wait, I must provide full context or use targeted replacement)
+// To keep it safe, I will replace the LeftSidebar component part.
 
 // --- Folder GRID Item (Mini Vertical Thumbnail) ---
 
@@ -110,6 +113,15 @@ const FolderTreeItem = ({ folder, depth = 0, allFolders, filterMode, folderSortM
                     <Folder size={16} className="text-[var(--text-dim)] shrink-0 group-hover:text-[var(--text-secondary)]" />
                 )}
                 <span className="truncate flex-1 text-sm font-medium">{folder.name}</span>
+
+                {/* File Count - Respects Type Filter if Possible, else shows total */}
+                <span className="text-[9px] font-mono text-gray-500 mr-1">
+                    {(filterMode.includes('video') && !filterMode.includes('all'))
+                        ? (folder.videoCount || folder.fileCount) // Fallback if videoCount missing
+                        : folder.fileCount
+                    }
+                </span>
+
                 <div className="flex items-center gap-1 opacity-60">
                     {folder.hasGifs && <span className="text-[8px] bg-purple-500/20 text-purple-200 px-1 rounded">GIF</span>}
                     {folder.hasVideos && <Film size={10} />}
@@ -155,14 +167,24 @@ const LeftSidebar = () => {
 
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
     const [pendingHandle, setPendingHandle] = useState(null);
+    const [recentLibs, setRecentLibs] = useState([]); // Recent Libraries State
     const [expandSignal, setExpandSignal] = useState({ mode: 'default', id: 0 });
 
     useEffect(() => {
         const checkRestore = async () => {
-            const handle = await getSavedFolderHandle();
-            if (handle) {
-                setPendingHandle(handle);
-                setShowRestorePrompt(true);
+            try {
+                // Load Last Handle
+                const handle = await getSavedFolderHandle();
+                if (handle) {
+                    setPendingHandle(handle);
+                    setShowRestorePrompt(true);
+                }
+                // Load Recent Libraries
+                const recents = await getRecentLibraries();
+                if (recents) setRecentLibs(recents);
+            } catch (error) {
+                // Silently fail - IndexedDB might not be available yet
+                console.warn('[LeftSidebar] Could not restore session:', error.message);
             }
         };
         checkRestore();
@@ -179,9 +201,21 @@ const LeftSidebar = () => {
         setShowRestorePrompt(false);
     };
 
+    const handleOpenRecent = async (handle) => {
+        if (!handle) return;
+        const hasPerm = await verifyPermission(handle);
+        if (hasPerm) {
+            setFolderHandle(handle);
+            setCurrentFolder(`/${handle.name}`);
+            startScan(handle);
+        } else {
+            console.warn("Permission denied for recent library");
+        }
+    };
+
     const sortedFolders = useMemo(() => {
         if (!folders) return [];
-        console.log('[LeftSidebar] Folders:', folders.length);
+        // console.log('[LeftSidebar] Folders:', folders.length);
         return [...folders].sort((a, b) => {
             switch (folderSortMode) {
                 case 'count':
@@ -372,25 +406,56 @@ const LeftSidebar = () => {
 
                     <div className="flex-1 min-h-0 bg-black/10">
                         {rootFolders.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-40 text-[var(--text-dim)]">
+                            <div className="flex flex-col items-center justify-start h-full pt-8 text-[var(--text-dim)] overflow-y-auto">
                                 <button
                                     onClick={async () => {
                                         try {
                                             const handle = await window.showDirectoryPicker();
                                             if (handle) {
                                                 setFolderHandle(handle);
-                                                setCurrentFolder(`/ ${handle.name} `);
+                                                setCurrentFolder(`/${handle.name}`);
                                                 startScan(handle);
                                             }
                                         } catch (e) {
                                             console.warn("Folder picker cancelled or failed", e);
                                         }
                                     }}
-                                    className="flex flex-col items-center group hover:text-white transition-colors"
+                                    className="flex flex-col items-center group hover:text-white transition-colors mb-8"
                                 >
-                                    <Folder className="mb-2 opacity-20 group-hover:opacity-60 transition-opacity" size={32} />
-                                    <span className="text-xs font-bold uppercase tracking-widest underline decoration-dashed underline-offset-4">Open Library</span>
+                                    <div className="bg-[var(--accent-primary)]/10 p-4 rounded-full mb-3 group-hover:bg-[var(--accent-primary)]/20 transition-colors">
+                                        <FolderOpen className="text-[var(--accent-primary)]" size={32} />
+                                    </div>
+                                    <span className="text-xs font-bold uppercase tracking-widest">Open Library</span>
                                 </button>
+
+                                {/* Recent Libraries */}
+                                {recentLibs.length > 0 && (
+                                    <div className="w-full px-6">
+                                        <h4 className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-dim)] mb-3 border-b border-white/5 pb-1">
+                                            Recent Libraries
+                                        </h4>
+                                        <div className="flex flex-col gap-2">
+                                            {recentLibs.map((rec) => (
+                                                <button
+                                                    key={rec.name}
+                                                    onClick={() => handleOpenRecent(rec)}
+                                                    className="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl text-left border border-white/5 hover:border-white/10 transition-all group w-full"
+                                                >
+                                                    <History size={16} className="text-[var(--text-dim)] group-hover:text-[var(--accent-primary)]" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-xs font-bold text-gray-300 group-hover:text-white truncate">
+                                                            {rec.name}
+                                                        </div>
+                                                        <div className="text-[9px] text-[var(--text-dim)] truncate">
+                                                            Click to restore
+                                                        </div>
+                                                    </div>
+                                                    <ChevronRight size={14} className="text-[var(--text-dim)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="overflow-y-auto h-full p-2 scrollbar-thin scrollbar-thumb-white/10">

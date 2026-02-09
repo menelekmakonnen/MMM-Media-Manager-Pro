@@ -8,6 +8,8 @@ import FullGridView from './FullGridView';
 import FolderExplorer from './FolderExplorer';
 import TopBar from './TopBar';
 import useMediaStore from '../../stores/useMediaStore';
+import GalleryView from './Views/GalleryView';
+import SlideshowView from './Views/SlideshowView';
 
 const ResizeHandleVertical = () => (
     <PanelResizeHandle className="w-1 hover:w-1.5 bg-transparent hover:bg-[var(--accent-glow)] transition-all duration-300 flex flex-col justify-center items-center outline-none z-50 group">
@@ -22,7 +24,9 @@ const ResizeHandleHorizontal = () => (
 );
 
 const MainContentPanel = () => {
-    const { globalViewMode } = useMediaStore();
+    const { appViewMode, globalViewMode } = useMediaStore();
+
+    if (appViewMode === 'gallery') return <GalleryView />;
 
     if (globalViewMode === 'fullGrid') return <FullGridView />;
     if (globalViewMode === 'folderGrid') return <FolderExplorer />;
@@ -34,9 +38,12 @@ const MainLayout = () => {
     const {
         nextFile, prevFile, firstFile, lastFile,
         toggleSlideshow, slideshowActive,
+        appViewMode,
         fullscreenMode, toggleFullscreen,
         movieMode, toggleMovieMode,
-        theme, themeMode
+        theme, themeMode,
+        setAppViewMode,
+        slideshowIdle
     } = useMediaStore();
 
     React.useEffect(() => {
@@ -55,6 +62,10 @@ const MainLayout = () => {
             if (e.key === 'End') lastFile();
             if (e.key === ' ') toggleSlideshow();
             if (e.key === 'Escape') {
+                if (appViewMode === 'slideshow') {
+                    setAppViewMode('standard');
+                    return;
+                }
                 if (fullscreenMode) toggleFullscreen();
                 if (movieMode) toggleMovieMode();
             }
@@ -64,9 +75,28 @@ const MainLayout = () => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [nextFile, prevFile, firstFile, lastFile, toggleSlideshow, slideshowActive, fullscreenMode, toggleFullscreen, movieMode, toggleMovieMode]);
+    }, [nextFile, prevFile, firstFile, lastFile, toggleSlideshow, slideshowActive, fullscreenMode, toggleFullscreen, movieMode, toggleMovieMode, appViewMode, setAppViewMode]);
 
-    // FULLSCREEN or MOVIE MODE: Immersive viewing
+    // Sync Fullscreen with Electron (Side Effect)
+    React.useEffect(() => {
+        if (window.electronAPI) {
+            window.electronAPI.toggleFullscreen();
+        }
+    }, [fullscreenMode]);
+
+    // SLIDESHOW VIEW (Highest Priority)
+    if (appViewMode === 'slideshow') {
+        return (
+            <div className="h-full w-full bg-black relative">
+                <div className={`absolute top-0 left-0 right-0 z-[60] transition-opacity duration-300 ${slideshowIdle ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
+                    <TopBar />
+                </div>
+                <SlideshowView />
+            </div>
+        );
+    }
+
+    // FULLSCREEN or MOVIE MODE: Immersive viewing (Standard Grid)
     if (fullscreenMode || (movieMode && slideshowActive)) {
         return (
             <div className="h-full w-full bg-black relative group">
@@ -92,7 +122,7 @@ const MainLayout = () => {
                     <Panel minSize={movieMode ? 100 : 50}>
                         <PanelGroup direction="horizontal">
                             {/* Left Sidebar */}
-                            {!movieMode && (
+                            {!movieMode && appViewMode !== 'gallery' && (
                                 <>
                                     <Panel defaultSize={18} minSize={15} maxSize={25} collapsible={true} className="z-10">
                                         <LeftSidebar />
@@ -107,7 +137,7 @@ const MainLayout = () => {
                             </Panel>
 
                             {/* Right Sidebar (Optional) */}
-                            {!movieMode && (
+                            {!movieMode && appViewMode !== 'gallery' && (
                                 <>
                                     <ResizeHandleVertical />
                                     <Panel defaultSize={12} minSize={8} maxSize={18} collapsible={true} className="z-10">

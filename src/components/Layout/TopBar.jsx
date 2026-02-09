@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon } from 'lucide-react';
+import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
 import { clearThumbnailCache } from '../../utils/thumbnailCache';
 import { openDirectory } from '../../utils/fileSystem';
@@ -11,7 +11,8 @@ import WindowControls from './WindowControls';
 const TopBar = () => {
     const {
         currentFolder, isScanning, startScan, cancelScan, setFolderHandle, setCurrentFolder,
-        explorerSearchQuery, setExplorerSearchQuery
+        explorerSearchQuery, setExplorerSearchQuery,
+        appViewMode, setAppViewMode, setGlobalViewMode
     } = useMediaStore();
 
     // Format path for breadcrumbs
@@ -86,18 +87,81 @@ const TopBar = () => {
                     {/* Spacer */}
                     <div className="flex-1" />
                     {/* Breadcrumbs (Condensed) */}
-                    <div className="hidden xl:flex items-center gap-1 text-xs text-[var(--text-secondary)] overflow-hidden">
-                        <span className="hover:text-white cursor-pointer transition-colors shrink-0">Library</span>
-                        {pathParts.slice(-2).map((part, i) => (
-                            <React.Fragment key={i}>
-                                <ChevronRight size={10} className="text-[var(--text-dim)] shrink-0" />
-                                <span className="hover:text-white cursor-pointer transition-colors truncate max-w-[100px] shrink-0">
-                                    {part}
-                                </span>
-                            </React.Fragment>
-                        ))}
+                    <div className="hidden xl:flex items-center gap-1 text-xs text-[var(--text-secondary)] overflow-hidden" style={{ WebkitAppRegion: 'no-drag' }}>
+                        <span
+                            className="hover:text-white cursor-pointer transition-colors shrink-0 font-medium"
+                            onClick={() => {
+                                // "Library" could reset to root or clear search? 
+                                // For now, maybe just clear search if already at root, or do nothing?
+                                setExplorerSearchQuery('');
+                            }}
+                        >
+                            Library
+                        </span>
+                        {pathParts.slice(-3).map((part, i, arr) => {
+                            // Calculate original index in pathParts
+                            // If showing last 3, then arr length is up to 3.
+                            // The true index in pathParts is: (pathParts.length - arr.length) + i
+                            const trueIndex = (pathParts.length - arr.length) + i;
+
+                            return (
+                                <React.Fragment key={i}>
+                                    <ChevronRight size={10} className="text-[var(--text-dim)] shrink-0" />
+                                    <span
+                                        className="hover:text-white cursor-pointer transition-colors truncate max-w-[150px] shrink-0 font-medium"
+                                        onClick={() => {
+                                            const newPath = pathParts.slice(0, trueIndex + 1).join('/');
+                                            console.log('[TopBar] Navigating to:', newPath);
+                                            setCurrentFolder(newPath); // This updates activeFolders and triggers updateProcessedFiles
+                                            setExplorerSearchQuery('');
+                                        }}
+                                        title={`Go to ${part}`}
+                                    >
+                                        {part}
+                                    </span>
+                                </React.Fragment>
+                            );
+                        })}
                     </div>
                 </div>
+
+                {/* View Switcher (Center-Right) */}
+                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5 mx-4" style={{ WebkitAppRegion: 'no-drag' }}>
+                    <button
+                        onClick={() => setAppViewMode('standard')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'standard' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Standard View"
+                    >
+                        <Layout size={14} />
+                        <span className="hidden xl:inline">Grid</span>
+                    </button>
+                    <button
+                        onClick={() => setAppViewMode('gallery')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'gallery' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Gallery View"
+                    >
+                        <ImageIcon size={14} />
+                        <span className="hidden xl:inline">Gallery</span>
+                    </button>
+                    <button
+                        onClick={() => setAppViewMode('slideshow')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'slideshow' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Slideshow View"
+                    >
+                        <PlayCircle size={14} />
+                        <span className="hidden xl:inline">Show</span>
+                    </button>
+                </div>
+
             </div>
 
             {/* Right: Actions */}

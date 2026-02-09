@@ -3,7 +3,7 @@ import { Play, Pause, Volume2, VolumeX, RefreshCw, RotateCcw, FastForward, Rewin
 import { useVideoRegistry } from '../contexts/VideoRegistryContext.js';
 import clsx from 'clsx';
 
-const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, masterVolume, isMasterMuted, masterPlaybackRate, rotation, onEnded, forcePlay, slotIndex }) => {
+const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, masterVolume, isMasterMuted, masterPlaybackRate, rotation, onEnded, forcePlay, slotIndex, hideControls }) => {
     const videoRef = useRef(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
@@ -152,63 +152,65 @@ const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, ma
             />
 
             {/* Hover Controls (Advanced) */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-[70] pointer-events-none group-hover:pointer-events-auto w-full px-2">
+            {!hideControls && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-[70] pointer-events-none group-hover:pointer-events-auto w-full px-2">
 
-                {/* Skip Controls Row - Responsive Wrap */}
-                <div className="flex flex-wrap justify-center items-center gap-1 bg-black/60 backdrop-blur rounded-full px-2 py-1 mb-1 max-w-[95%]">
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(-300); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">-5m</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(-120); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">-2m</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(-30); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">-30s</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(-5); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">-5s</button>
+                    {/* Skip Controls Row - Responsive Wrap */}
+                    <div className="flex flex-wrap justify-center items-center gap-1 bg-black/60 backdrop-blur rounded-full px-2 py-1 mb-1 max-w-[95%]">
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(-300); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">-5m</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(-120); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">-2m</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(-30); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">-30s</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(-5); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">-5s</button>
 
-                    <div className="w-px h-3 bg-white/20 mx-1 hidden sm:block"></div>
+                        <div className="w-px h-3 bg-white/20 mx-1 hidden sm:block"></div>
 
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(10); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">+10s</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(120); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+2m</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(300); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+5m</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleSkip(600); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+10m</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(10); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">+10s</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(120); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+2m</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(300); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+5m</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(600); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+10m</button>
+                    </div>
+
+                    {/* Main Action Row - Persistent or Easier Access */}
+                    <div className="flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-3 py-1.5 shadow-lg border border-white/10">
+                        <button onClick={handleReset} className="text-gray-300 hover:text-yellow-400 p-1" title="Reset">
+                            <RotateCcw size={14} />
+                        </button>
+
+                        {/* Play/Pause */}
+                        <button onClick={togglePlay} className="text-white hover:text-[var(--accent-primary)] p-1 transition-colors active:scale-95">
+                            {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                        </button>
+
+                        {/* Volume */}
+                        <button onClick={toggleMute} className="text-gray-300 hover:text-white p-1">
+                            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                        </button>
+
+                        {/* Speed */}
+                        <button onClick={cycleSpeed} className="flex items-center justify-center w-6 text-[9px] font-bold text-gray-300 hover:text-white border border-white/20 rounded ml-1" title={`Speed: ${effectiveRate}x`}>
+                            {effectiveRate}x
+                        </button>
+
+                        <div className="w-px h-3 bg-white/20 mx-1"></div>
+
+                        {/* Randomize This Slot (Content) */}
+                        <button onClick={handleRandomCheck} className="text-blue-300 hover:text-blue-100 p-1" title="Randomize This Slot">
+                            <RefreshCw size={14} />
+                        </button>
+
+                        {/* Random Start Point (Time Jump) - Replaces Global Shuffle */}
+                        <button onClick={(e) => {
+                            e.stopPropagation();
+                            if (videoRef.current && videoRef.current.duration) {
+                                videoRef.current.currentTime = Math.random() * videoRef.current.duration;
+                            }
+                        }} className="text-purple-300 hover:text-purple-100 p-1" title="Random Start Point">
+                            <Shuffle size={14} />
+                        </button>
+
+                    </div>
                 </div>
-
-                {/* Main Action Row - Persistent or Easier Access */}
-                <div className="flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-3 py-1.5 shadow-lg border border-white/10">
-                    <button onClick={handleReset} className="text-gray-300 hover:text-yellow-400 p-1" title="Reset">
-                        <RotateCcw size={14} />
-                    </button>
-
-                    {/* Play/Pause */}
-                    <button onClick={togglePlay} className="text-white hover:text-[var(--accent-primary)] p-1 transition-colors active:scale-95">
-                        {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                    </button>
-
-                    {/* Volume */}
-                    <button onClick={toggleMute} className="text-gray-300 hover:text-white p-1">
-                        {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                    </button>
-
-                    {/* Speed */}
-                    <button onClick={cycleSpeed} className="flex items-center justify-center w-6 text-[9px] font-bold text-gray-300 hover:text-white border border-white/20 rounded ml-1" title={`Speed: ${effectiveRate}x`}>
-                        {effectiveRate}x
-                    </button>
-
-                    <div className="w-px h-3 bg-white/20 mx-1"></div>
-
-                    {/* Randomize This Slot (Content) */}
-                    <button onClick={handleRandomCheck} className="text-blue-300 hover:text-blue-100 p-1" title="Randomize This Slot">
-                        <RefreshCw size={14} />
-                    </button>
-
-                    {/* Random Start Point (Time Jump) - Replaces Global Shuffle */}
-                    <button onClick={(e) => {
-                        e.stopPropagation();
-                        if (videoRef.current && videoRef.current.duration) {
-                            videoRef.current.currentTime = Math.random() * videoRef.current.duration;
-                        }
-                    }} className="text-purple-300 hover:text-purple-100 p-1" title="Random Start Point">
-                        <Shuffle size={14} />
-                    </button>
-
-                </div>
-            </div>
+            )}
         </div>
     );
 };

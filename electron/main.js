@@ -95,6 +95,11 @@ function createWindow() {
         }
     });
     ipcMain.on('window-close', () => mainWindow?.close());
+    ipcMain.on('window-fullscreen', () => {
+        if (mainWindow) {
+            mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        }
+    });
 
     // Pipe renderer logs to terminal
     mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {

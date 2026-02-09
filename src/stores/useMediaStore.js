@@ -12,6 +12,14 @@ const useMediaStore = create(persist((set, get) => ({
 
     // === FILTERING ===
     fileTypeFilter: ['video'], // Default to video per request
+    appViewMode: 'standard', // 'standard' | 'gallery' | 'slideshow' | 'fullscreen'
+    previousViewMode: 'standard', // For backing out of slideshow
+
+    // === GALLERY STATE ===
+    galleryZoom: 200,
+    galleryFilter: { sortBy: 'name', sortOrder: 'asc' },
+    galleryViewMode: 'media', // 'media' | 'both'
+    galleryOrientation: 'vertical', // 'vertical' | 'horizontal' | 'square'
     explorerSearchQuery: '',
     itemRotations: {},
     processedFiles: [],
@@ -20,18 +28,32 @@ const useMediaStore = create(persist((set, get) => ({
     scannedCount: 0,
     currentWorker: null,
 
+
+
     // === SLIDESHOW STATE ===
     slideshowActive: false,
     slideshowRandom: false,
-    slideshowDuration: 5, // Default 5s (3, 5, 10, 30)
-    slideshowTransition: 'slide', // 'fade' | 'slide' | 'zoom' | 'swipe' | 'flip'
+    slideshowDuration: 5, // Default 5s
+    slideshowTransition: 'fade', // 'none' | 'fade' | 'slide' | 'zoom' | 'swipe' | 'flip' | ...
     superSlideshowActive: false,
+    slideshowIdle: false, // For hiding UI in immersive mode
+
+    // === PLAYBACK STATE ===
+    masterVolume: 1.0,
+    isMasterMuted: false,
 
     // === ACTIONS: Slideshow ===
     setSlideshowDuration: (duration) => set({ slideshowDuration: duration }),
     setSlideshowTransition: (mode) => set({ slideshowTransition: mode }),
     setSuperSlideshowActive: (active) => set({ superSlideshowActive: active }),
     toggleSuperSlideshow: () => set(state => ({ superSlideshowActive: !state.superSlideshowActive })),
+    setSlideshowIdle: (idle) => set({ slideshowIdle: idle }),
+    adjustSlideshowDuration: (delta) => set(state => ({ slideshowDuration: Math.max(1, state.slideshowDuration + delta) })),
+    triggerRandomStart: () => set(state => ({ shuffleSeed: state.shuffleSeed + 1 })), // Re-use shuffle seed to trigger effects
+
+    // === ACTIONS: Playback ===
+    setMasterVolume: (vol) => set({ masterVolume: vol }),
+    setIsMasterMuted: (val) => set({ isMasterMuted: val }),
 
     // === ACTIONS: Performance ===
     showMoreItems: () => set(state => ({ visibleLimit: state.visibleLimit + 1000 })),
@@ -163,6 +185,84 @@ const useMediaStore = create(persist((set, get) => ({
 
     setExplorerGridColumns: (cols) => set({ explorerGridColumns: cols }),
 
+    // === ACTIONS: Gallery & View ===
+    setGalleryZoom: (zoom) => set({ galleryZoom: zoom }),
+    setGalleryFilter: (filter) => set(state => ({ galleryFilter: { ...state.galleryFilter, ...filter } })),
+    setGalleryViewMode: (mode) => set({ galleryViewMode: mode }),
+    setGalleryOrientation: (orientation) => set({ galleryOrientation: orientation }),
+    getGalleryFiles: () => {
+        const { files, activeFolders, showDuplicates, metadataFilters } = get();
+        let filtered = files;
+
+        // Folder check (must respect this)
+        const folderSet = activeFolders && activeFolders.length > 0 ? new Set(activeFolders) : null;
+        if (folderSet) {
+            filtered = files.filter(f => {
+                if (folderSet.has(f.folderPath)) return true;
+                for (const af of activeFolders) {
+                    if (f.folderPath?.startsWith(af + '/')) return true;
+                }
+                return false;
+            });
+        }
+
+        // Apply Metadata Filters for parity
+        if (metadataFilters.aspectRatio !== 'all') {
+            filtered = filtered.filter(f => {
+                const w = f.width || (f.type === 'video' ? 1920 : 1500);
+                const h = f.height || (f.type === 'video' ? 1080 : 1000);
+                const ar = w / h;
+                if (metadataFilters.aspectRatio === 'landscape') return ar > 1.2;
+                if (metadataFilters.aspectRatio === 'portrait') return ar < 0.8;
+                if (metadataFilters.aspectRatio === 'square') return ar >= 0.8 && ar <= 1.2;
+                return true;
+            });
+        }
+        if (metadataFilters.nameLength !== 'all') {
+            filtered = filtered.filter(f => {
+                const len = f.name.length;
+                if (metadataFilters.nameLength === 'short') return len < 15;
+                if (metadataFilters.nameLength === 'medium') return len >= 15 && len < 40;
+                if (metadataFilters.nameLength === 'long') return len >= 40;
+                return true;
+            });
+        }
+
+        // Duplicates
+        if (!showDuplicates) {
+            const groups = new Map();
+            filtered.forEach(file => {
+                const key = `${file.name}-${file.size}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(file);
+            });
+            const uniqueFiles = [];
+            groups.forEach(groupFiles => uniqueFiles.push(groupFiles[0]));
+            filtered = uniqueFiles;
+        }
+
+        return filtered;
+    },
+
+    setAppViewMode: (mode) => set(state => ({
+        appViewMode: mode,
+        previousViewMode: state.appViewMode !== mode ? state.appViewMode : state.previousViewMode
+    })),
+
+    startSlideshowAt: (path) => {
+        const { processedFiles, setCurrentFileIndex, setAppViewMode } = get();
+        const index = processedFiles.findIndex(f => f.path === path);
+        if (index !== -1) {
+            setCurrentFileIndex(index);
+            setAppViewMode('slideshow');
+            set({ slideshowActive: true });
+        } else {
+            // Fallback if not found in processed (e.g. filter hidden it?), try raw or warn?
+            // For now, if not in processed, we shouldn't show it as it breaks the "match grid" rule.
+            console.warn("File not found in current view filters:", path);
+        }
+    },
+
 
 
     // === ACTIONS: Folder & Files ===
@@ -209,34 +309,38 @@ const useMediaStore = create(persist((set, get) => ({
     setCurrentFileIndex: (index) => set({ currentFileIndex: index }),
 
     getCurrentFile: () => {
-        const { getSortedFiles, currentFileIndex } = get();
-        const sorted = getSortedFiles();
-        if (currentFileIndex >= 0 && currentFileIndex < sorted.length) {
-            return sorted[currentFileIndex];
+        const { processedFiles, currentFileIndex } = get();
+        if (currentFileIndex >= 0 && currentFileIndex < processedFiles.length) {
+            return processedFiles[currentFileIndex];
         }
         return null;
     },
 
     nextFile: () => {
-        const sorted = get().getSortedFiles();
-        const { currentFileIndex } = get();
-        if (sorted.length === 0) return;
-        const nextIndex = (currentFileIndex + 1) % sorted.length;
+        const { processedFiles, currentFileIndex } = get();
+        if (processedFiles.length === 0) return;
+        const nextIndex = (currentFileIndex + 1) % processedFiles.length;
         set({ currentFileIndex: nextIndex });
+
+        // Ensure the new index is visible if in grid view (auto-load more)
+        const { visibleLimit, showMoreItems } = get();
+        if (nextIndex >= visibleLimit) {
+            showMoreItems();
+        }
     },
 
     prevFile: () => set((state) => {
-        const sorted = get().getSortedFiles();
-        if (sorted.length === 0) return {};
+        const { processedFiles } = get();
+        if (processedFiles.length === 0) return {};
         // Fix loopback logic: (current - 1 + total) % total
-        const newIndex = (state.currentFileIndex - 1 + sorted.length) % sorted.length;
+        const newIndex = (state.currentFileIndex - 1 + processedFiles.length) % processedFiles.length;
         return { currentFileIndex: newIndex };
     }),
 
     firstFile: () => set({ currentFileIndex: 0 }),
     lastFile: () => {
-        const sorted = get().getSortedFiles();
-        set({ currentFileIndex: sorted.length - 1 });
+        const { processedFiles } = get();
+        set({ currentFileIndex: processedFiles.length - 1 });
     },
 
     // Skip by grid size (for groups)
@@ -527,7 +631,16 @@ const useMediaStore = create(persist((set, get) => ({
         metadataFilters: state.metadataFilters,
         fileTypeFilter: state.fileTypeFilter,
         threeGridEqual: state.threeGridEqual,
-        nineGridHero: state.nineGridHero
+        threeGridEqual: state.threeGridEqual,
+        nineGridHero: state.nineGridHero,
+        galleryZoom: state.galleryZoom,
+        galleryFilter: state.galleryFilter,
+        galleryViewMode: state.galleryViewMode,
+        galleryOrientation: state.galleryOrientation,
+        slideshowDuration: state.slideshowDuration,
+        slideshowTransition: state.slideshowTransition,
+        masterVolume: state.masterVolume,
+        isMasterMuted: state.isMasterMuted
     }),
 }));
 
