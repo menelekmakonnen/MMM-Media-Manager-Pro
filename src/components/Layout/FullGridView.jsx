@@ -1,7 +1,7 @@
 import React, { useState, memo, useEffect, useRef, useCallback } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import clsx from 'clsx';
-import { Film, Image as ImageIcon, ZoomIn, X, Rows, Columns, Square, Play } from 'lucide-react';
+import { Film, Image as ImageIcon, ZoomIn, X, Rows, Columns, Square, Play, EyeOff } from 'lucide-react';
 import SortingControls from '../SortingControls';
 import { getThumbnailUrl, getCachedUrl } from '../../utils/thumbnailCache';
 import { Grid } from '../../vendor/react-window-patch';
@@ -77,6 +77,7 @@ const GridThumbnail = memo(({ file, onClick, isSelected, orientation }) => {
     const [src, setSrc] = useState(() => getCachedUrl(file));
     const [videoThumb, setVideoThumb] = useState(null);
     const [loading, setLoading] = useState(!src && !videoThumb);
+    const { mediaFitMode } = useMediaStore();
     const ref = useRef(null);
     const loadingRef = useRef(false);
 
@@ -138,12 +139,26 @@ const GridThumbnail = memo(({ file, onClick, isSelected, orientation }) => {
                 <VideoThumbnailGenerator file={file} onThumbnail={handleVideoThumb} />
             )}
 
+            {/* Exclude Button */}
+            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        useMediaStore.getState().toggleItemExclusion(file.path);
+                    }}
+                    className="p-1 bg-black/60 backdrop-blur rounded text-white/70 hover:text-white hover:bg-amber-500 hover:border-amber-400 transition-all shadow-xl"
+                    title="Exclude Item"
+                >
+                    <EyeOff size={12} />
+                </button>
+            </div>
+
             {loading && !displaySrc ? (
                 <div className="w-full h-full flex items-center justify-center bg-white/5">
                     <div className="w-4 h-4 rounded-full border border-[var(--accent-primary)]/30 border-t-[var(--accent-primary)] animate-spin" />
                 </div>
             ) : displaySrc ? (
-                <img src={displaySrc} alt={file?.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                <img src={displaySrc} alt={file?.name} className={clsx("w-full h-full", mediaFitMode === 'cover' ? 'object-cover' : 'object-contain')} loading="lazy" decoding="async" />
             ) : (
                 <div className="w-full h-full flex items-center justify-center bg-white/5">
                     {file?.type === 'video' ? (

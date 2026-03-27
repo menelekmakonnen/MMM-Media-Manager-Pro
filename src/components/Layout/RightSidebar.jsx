@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import clsx from 'clsx';
-import { FileType, Calendar, HardDrive, BarChart2, Image as ImageIcon, Film, Filter, ChevronUp, ChevronDown, Check } from 'lucide-react';
+import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Film, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target } from 'lucide-react';
 
 const formatBytes = (bytes, decimals = 2) => {
     if (!+bytes) return '0 B';
@@ -28,7 +28,7 @@ const FilterSection = ({ title, expanded = true, children }) => {
     );
 }
 
-const SortToggle = ({ field, label }) => {
+const SortToggle = ({ field, label, icon: Icon }) => {
     // Single Select Logic: Verify mutual exclusivity
     const { sortStack, setSortStack } = useMediaStore();
     const activeSort = sortStack.find(s => s.field === field);
@@ -47,14 +47,18 @@ const SortToggle = ({ field, label }) => {
         <button
             onClick={handleClick}
             className={clsx(
-                "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all",
+                "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all overflow-hidden group/btn",
                 isPrimary ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
             )}
+            title={label}
         >
-            <span className="font-medium">{label}</span>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+                {Icon && <Icon size={14} className="shrink-0" />}
+                <span className="font-medium truncate text-left">{label}</span>
+            </div>
             {isPrimary && (
-                <span className="text-[9px] font-mono bg-[var(--accent-primary)] text-white px-1 rounded">
-                    {activeSort?.order === 'asc' ? 'ASC' : 'DESC'}
+                <span className="text-[9px] font-mono bg-[var(--accent-primary)] text-white px-1 rounded shrink-0 ml-2">
+                    {activeSort?.order === 'asc' ? 'ASC' : 'DSC'}
                 </span>
             )}
         </button>
@@ -65,13 +69,18 @@ const RightSidebar = () => {
     const {
         getSortedFiles,
         theme, setTheme,
-        metadataFilters, setMetadataFilters
+        metadataFilters, setMetadataFilters,
+        shuffleFiles, sortStack, favoritesOnly, setFavoritesOnly,
+        showJumpButtons, toggleJumpButtons,
+        // Grid Options
+        gridColumns, gridRows, threeGridEqual,
+        toggleDual, toggleTriple, toggleQuad, toggleSix, toggleNine, toggleTwelve, setGridLayout
     } = useMediaStore();
 
     return (
         <div className="h-full w-full glass-sidebar border-l border-[var(--glass-border)] flex flex-col text-[10px]">
             {/* --- TOP SECTION: FILTERS & SORT --- */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin flex flex-col min-h-0 bg-black/10">
+            <div className="flex-1 overflow-y-auto scrollbar-thin flex flex-col min-h-0 bg-black/10 @container">
                 <div className="px-3 py-2 border-b border-white/5 flex items-center bg-black/20 shrink-0 sticky top-0 backdrop-blur-md z-10">
                     <span className="font-bold text-[var(--text-secondary)] tracking-wider flex items-center gap-1 uppercase">
                         <Filter size={10} /> Refining
@@ -82,71 +91,104 @@ const RightSidebar = () => {
                     {/* METADATA FILTERS */}
                     <FilterSection title="Metadata Filters" expanded={true}>
                         <div className="space-y-3">
-                            {/* Aspect Ratio */}
-                            <div>
-                                <span className="text-[9px] uppercase font-bold text-[var(--text-dim)] mb-1 block">Aspect Ratio</span>
-                                <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
-                                    {[
-                                        { id: 'all', label: 'All' },
-                                        { id: 'landscape', label: 'Landscape' },
-                                        { id: 'portrait', label: 'Portrait' },
-                                        { id: 'square', label: 'Square' }
-                                    ].map(opt => (
-                                        <button
-                                            key={opt.id}
-                                            onClick={() => setMetadataFilters({ aspectRatio: opt.id })}
-                                            className={clsx(
-                                                "px-2 py-1 rounded-full text-[9px] whitespace-nowrap transition-all",
-                                                metadataFilters.aspectRatio === opt.id
-                                                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                                                    : "bg-white/5 text-[var(--text-dim)] hover:text-white"
-                                            )}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            {/* Favorites Filter */}
+                            <button
+                                onClick={() => setFavoritesOnly(!favoritesOnly)}
+                                className={clsx(
+                                    "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all",
+                                    favoritesOnly 
+                                        ? "bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 shadow-[inset_0_0_8px_rgba(234,179,8,0.2)]" 
+                                        : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
+                                )}
+                            >
+                                <span className="font-bold flex items-center gap-2"><Star size={12} fill={favoritesOnly ? "currentColor" : "none"} /> Favorites Only</span>
+                            </button>
+                        </div>
+                    </FilterSection>
 
-                            {/* Name Length */}
-                            <div>
-                                <span className="text-[9px] uppercase font-bold text-[var(--text-dim)] mb-1 block">Name Length</span>
-                                <div className="flex gap-1">
-                                    {[
-                                        { id: 'all', label: 'All' },
-                                        { id: 'short', label: 'Short' },
-                                        { id: 'medium', label: 'Med' },
-                                        { id: 'long', label: 'Long' }
-                                    ].map(opt => (
-                                        <button
-                                            key={opt.id}
-                                            onClick={() => setMetadataFilters({ nameLength: opt.id })}
-                                            className={clsx(
-                                                "flex-1 py-1 rounded text-[9px] transition-all",
-                                                metadataFilters.nameLength === opt.id
-                                                    ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                                                    : "bg-white/5 text-[var(--text-dim)] hover:text-white"
-                                            )}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                    {/* UI SETTINGS */}
+                    <FilterSection title="UI Settings" expanded={true}>
+                        <div className="space-y-3">
+                            <button
+                                onClick={toggleJumpButtons}
+                                className={clsx(
+                                    "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all",
+                                    showJumpButtons 
+                                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-[inset_0_0_8px_rgba(59,130,246,0.2)]" 
+                                        : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
+                                )}
+                            >
+                                <span className="font-bold flex items-center gap-2">
+                                    <div className={clsx("w-2 h-2 rounded-full", showJumpButtons ? "bg-blue-400" : "bg-white/20")} />
+                                    Show Jump Bubble
+                                </span>
+                            </button>
                         </div>
                     </FilterSection>
 
                     {/* SORTING STACK */}
                     <FilterSection title="Sorting Order" expanded={true}>
                         <div className="space-y-1">
-                            <SortToggle field="name" label="Name" />
-                            <SortToggle field="date" label="Date Modified" />
-                            <SortToggle field="size" label="Size" />
-                            <SortToggle field="nameLength" label="Name Length" />
-                            <SortToggle field="dimensions" label="Dimensions (Area)" />
-                            <SortToggle field="aspectRatio" label="Aspect Ratio" />
+                            <SortToggle field="name" label="Name" icon={FileType} />
+                            <SortToggle field="date" label="Date Modified" icon={Calendar} />
+                            <SortToggle field="size" label="Size" icon={HardDrive} />
+                            <SortToggle field="dimensions" label="Dimensions (Area)" icon={Maximize} />
+                            <SortToggle field="aspectRatio" label="Aspect Ratio" icon={RectangleHorizontal} />
                             <div className="h-px bg-white/5 my-1" />
-                            <SortToggle field="path" label="Default (Path)" />
+                            <SortToggle field="path" label="Default (Path)" icon={Film} />
+                            
+                            <button
+                                onClick={() => shuffleFiles()}
+                                className={clsx(
+                                    "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all overflow-hidden",
+                                    sortStack[0]?.field === 'random' ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
+                                )}
+                                title="Randomize"
+                            >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Shuffle size={14} className="shrink-0" />
+                                    <span className="font-medium truncate text-left">Randomize</span>
+                                </div>
+                                {sortStack[0]?.field === 'random' && (
+                                    <span className="text-[9px] font-mono bg-[var(--accent-primary)] text-white px-1 rounded shrink-0 ml-2">
+                                        RND
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                    </FilterSection>
+
+                    {/* GRID LAYOUT */}
+                    <FilterSection title="Grid Layout" expanded={true}>
+                        <div className="grid grid-cols-2 lg:grid-cols-2 gap-1.5 overflow-hidden">
+                            <button onClick={() => setGridLayout(1, 1)} title="Single Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden", (gridColumns === 1 && gridRows === 1) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <Square size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-left text-[10px] hidden @min-w-[10rem]:block">Single</span>
+                            </button>
+                            <button onClick={toggleDual} title="Dual Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden", (gridColumns * gridRows === 2) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <Columns size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-left text-[10px] hidden @min-w-[10rem]:block">Dual</span>
+                            </button>
+                            <button onClick={toggleTriple} title="Triple Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden", (gridColumns * gridRows === 3) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <Columns3 size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-left text-[10px] hidden @min-w-[10rem]:block">Triple</span>
+                            </button>
+                            <button onClick={toggleQuad} title="Quad Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden", (gridColumns * gridRows === 4) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <Grid2X2 size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-left text-[10px] hidden @min-w-[10rem]:block">Quad (4)</span>
+                            </button>
+                            <button onClick={toggleSix} title="Six Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden", (gridColumns * gridRows === 6) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <Table size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-left text-[10px] hidden @min-w-[10rem]:block">Six (6)</span>
+                            </button>
+                            <button onClick={toggleNine} title="Nine Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden", (gridColumns === 3 && gridRows === 3) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <Grid3X3 size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-left text-[10px] hidden @min-w-[10rem]:block">Nine (9)</span>
+                            </button>
+                            <button onClick={toggleTwelve} title="Twelve Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden col-span-full justify-center", (gridColumns * gridRows === 12) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
+                                <LayoutGrid size={14} className="shrink-0" />
+                                <span className="font-medium truncate text-[10px]">Twelve (12)</span>
+                            </button>
                         </div>
                     </FilterSection>
                 </div>

@@ -8,7 +8,7 @@ export const saveSession = async (store) => {
         const sessionData = {
             version: 1,
             timestamp: new Date().toISOString(),
-            app: "MMM Media Manager",
+            app: "Mmmedia Darkroom",
             config: {
                 currentFolder: state.currentFolder,
                 fileTypeFilter: state.fileTypeFilter,
@@ -59,7 +59,7 @@ export const loadSession = async (store) => {
         const text = await file.text();
         const data = JSON.parse(text);
 
-        if (data.app !== "MMM Media Manager") {
+        if (data.app !== "Mmmedia Darkroom") {
             return { success: false, message: 'Invalid session file.' };
         }
 

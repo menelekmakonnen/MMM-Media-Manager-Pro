@@ -70,7 +70,10 @@ const SlideshowOverlay = () => {
             if (!slideshowActive) return;
 
             if (e.key === 'Escape') {
+                e.preventDefault();
+                const currentIndex = useMediaStore.getState().currentFileIndex;
                 setAppViewMode(previousViewMode || 'standard');
+                useMediaStore.getState().setCurrentFileIndex(currentIndex); // Force re-sync to clear offsets naturally
             }
             if (e.key === 'ArrowUp') {
                 adjustSlideshowDuration(1);
@@ -197,8 +200,11 @@ const SlideshowOverlay = () => {
                                 </button>
 
                                 <button
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        const currentIndex = useMediaStore.getState().currentFileIndex;
                                         setAppViewMode(previousViewMode || 'standard');
+                                        useMediaStore.getState().setCurrentFileIndex(currentIndex);
                                     }}
                                     className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white border-2 border-white/20 shadow-lg hover:bg-red-600 transition-all ml-2"
                                     title="Close Slideshow"

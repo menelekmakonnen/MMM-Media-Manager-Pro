@@ -1,19 +1,31 @@
-import React, { useEffect } from 'react';
-import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle, Maximize, Minimize, Film } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
 import { clearThumbnailCache } from '../../utils/thumbnailCache';
 import { openDirectory } from '../../utils/fileSystem';
 import { saveFolderHandle } from '../../utils/persistence';
 import clsx from 'clsx';
+import { getLogoSvgString } from '../../utils/LogoGenerator';
 
 import WindowControls from './WindowControls';
 
 const TopBar = () => {
+    const [logoUrl, setLogoUrl] = useState('');
     const {
         currentFolder, isScanning, startScan, cancelScan, setFolderHandle, setCurrentFolder,
         explorerSearchQuery, setExplorerSearchQuery,
-        appViewMode, setAppViewMode, setGlobalViewMode
+        appViewMode, setAppViewMode, setGlobalViewMode, theme,
+        mediaFitMode, toggleMediaFitMode
     } = useMediaStore();
+
+    useEffect(() => {
+        // slight delay to allow CSS vars to update in DOM
+        setTimeout(() => {
+            const accentColor = getComputedStyle(document.body).getPropertyValue('--accent-primary').trim() || '#3b82f6';
+            const svgString = getLogoSvgString(accentColor);
+            setLogoUrl(`data:image/svg+xml;base64,${btoa(svgString)}`);
+        }, 50);
+    }, [theme]);
 
     // Format path for breadcrumbs
     const pathParts = currentFolder ? currentFolder.split('/').filter(Boolean) : [];
@@ -40,7 +52,7 @@ const TopBar = () => {
             console.log('[TopBar] Handle received:', handle);
             if (handle) {
                 setFolderHandle(handle);
-                setCurrentFolder(handle.name);
+                setCurrentFolder('/' + handle.name);
                 saveFolderHandle(handle);
                 console.log('[TopBar] Starting scan...', handle.name);
                 startScan(handle);
@@ -71,15 +83,23 @@ const TopBar = () => {
                 <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'drag' }}>
 
                     {/* Branding */}
-                    <div className="flex items-center gap-3">
-                        <img src="/icon.png" alt="Logo" className="w-8 h-8 object-contain hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
-                        <div className="flex flex-col">
-                            <h1 className="text-xl font-black tracking-tighter leading-none bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent filter drop-shadow-sm">
-                                MMM <span className="text-[var(--accent-primary)]">Media</span>
+                    <button
+                        className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                        onClick={() => {
+                            const modes = ['standard', 'slideshow', 'gallery', 'editor', 'settings'];
+                            const next = modes[(modes.indexOf(appViewMode) + 1) % modes.length];
+                            setAppViewMode(next);
+                        }}
+                        style={{ WebkitAppRegion: 'no-drag' }}
+                        title="Toggle View Mode"
+                    >
+                        <img src={logoUrl || "/icon.png"} alt="Mmmedia Darkroom Logo" className="w-8 h-8 object-contain hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
+                        <div className="flex flex-col items-start justify-center h-8">
+                            <h1 className="text-[1.15rem] font-black tracking-tight leading-none text-white/90 drop-shadow-sm flex items-center gap-1.5 pt-0.5">
+                                MMMedia <span className="font-light text-[var(--accent-primary)]/90 tracking-widest uppercase text-xs">Darkroom</span>
                             </h1>
-                            <span className="text-[8px] font-bold tracking-[0.2em] text-[var(--accent-primary)]/80 uppercase">Media Manager Pro v2.0.0</span>
                         </div>
-                    </div>
+                    </button>
                 </div>
 
                 {/* Center: Search & Navigation */}
@@ -110,7 +130,7 @@ const TopBar = () => {
                                     <span
                                         className="hover:text-white cursor-pointer transition-colors truncate max-w-[150px] shrink-0 font-medium"
                                         onClick={() => {
-                                            const newPath = pathParts.slice(0, trueIndex + 1).join('/');
+                                            const newPath = '/' + pathParts.slice(0, trueIndex + 1).join('/');
                                             console.log('[TopBar] Navigating to:', newPath);
                                             setCurrentFolder(newPath); // This updates activeFolders and triggers updateProcessedFiles
                                             setExplorerSearchQuery('');
@@ -133,21 +153,10 @@ const TopBar = () => {
                             "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
                             appViewMode === 'standard' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
                         )}
-                        title="Standard View"
+                        title="Standard Grid View"
                     >
                         <Layout size={14} />
                         <span className="hidden xl:inline">Grid</span>
-                    </button>
-                    <button
-                        onClick={() => setAppViewMode('gallery')}
-                        className={clsx(
-                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
-                            appViewMode === 'gallery' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
-                        )}
-                        title="Gallery View"
-                    >
-                        <ImageIcon size={14} />
-                        <span className="hidden xl:inline">Gallery</span>
                     </button>
                     <button
                         onClick={() => setAppViewMode('slideshow')}
@@ -155,10 +164,44 @@ const TopBar = () => {
                             "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
                             appViewMode === 'slideshow' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
                         )}
-                        title="Slideshow View"
+                        title="Presentation Slideshow View"
                     >
                         <PlayCircle size={14} />
                         <span className="hidden xl:inline">Show</span>
+                    </button>
+                    <button
+                        onClick={() => setAppViewMode('gallery')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'gallery' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Gallery Scroll View"
+                    >
+                        <ImageIcon size={14} />
+                        <span className="hidden xl:inline">Gallery</span>
+                    </button>
+                    <button
+                        onClick={() => setAppViewMode('editor')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'editor' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Timeline Editor View"
+                    >
+                        <Film size={14} />
+                        <span className="hidden xl:inline">Editor</span>
+                    </button>
+                    <div className="w-px h-5 bg-white/10 mx-1"></div>
+                    <button
+                        onClick={() => setAppViewMode('settings')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'settings' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="App Settings"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <span className="hidden xl:inline">Settings</span>
                     </button>
                 </div>
 

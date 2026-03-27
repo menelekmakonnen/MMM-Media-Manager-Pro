@@ -16,7 +16,7 @@ const getFileType = (filename) => {
 };
 
 let batch = [];
-const BATCH_SIZE = 200; // Increased from 50 to 200 for better performance
+let BATCH_SIZE = 200; // Increased from 50 to 200, ramps up to 5000 dynamically for better performance
 let folderTree = {};
 let folderSendDebounce = null;
 let shouldCancel = false;
@@ -35,6 +35,8 @@ const addToBatch = (fileData) => {
     batch.push(fileData);
     if (batch.length >= BATCH_SIZE) {
         flushBatch();
+        // Dynamic batch scaling: Ramp up rapidly to reduce IPC overhead and main thread locks on massive folders
+        if (BATCH_SIZE < 5000) BATCH_SIZE += 200;
     }
 };
 

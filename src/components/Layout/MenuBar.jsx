@@ -175,34 +175,7 @@ const MenuBar = ({ onOpenGuide }) => {
                 {activeMenu === 'view' && (
                     <div className="absolute top-full left-0 w-64 bg-[var(--bg-secondary)] border border-[var(--glass-border)] rounded-b-lg shadow-xl py-1 flex flex-col z-50">
 
-                        {/* THEMES SUBMENU */}
-                        <SubMenu
-                            label="Themes"
-                            icon={Layers}
-                            isOpen={hoveredSubMenu === 'themes'}
-                            onMouseEnter={() => setHoveredSubMenu('themes')}
-                            onMouseLeave={() => setHoveredSubMenu(null)}
-                        >
-                            <MenuItem label="Default (Dark Blue)" onClick={() => setTheme('default')} active={theme === 'default'} />
-                            <MenuItem label="Spring (Luxury Floral)" onClick={() => setTheme('spring')} active={theme === 'spring'} />
-                            <MenuItem label="Summer (Ocean Gold)" onClick={() => setTheme('summer')} active={theme === 'summer'} />
-                            <MenuItem label="Autumn (Russet Gold)" onClick={() => setTheme('autumn')} active={theme === 'autumn'} />
-                            <MenuItem label="Winter (Icy Silver)" onClick={() => setTheme('winter')} active={theme === 'winter'} />
-                            <MenuItem label="Harmattan (Dusty Gold)" onClick={() => setTheme('harmattan')} active={theme === 'harmattan'} />
-                        </SubMenu>
-
-                        {/* MODES SUBMENU */}
-                        <SubMenu
-                            label="Mode"
-                            icon={Sun}
-                            isOpen={hoveredSubMenu === 'mode'}
-                            onMouseEnter={() => setHoveredSubMenu('mode')}
-                            onMouseLeave={() => setHoveredSubMenu(null)}
-                        >
-                            <MenuItem label="Dark" icon={Moon} onClick={() => setThemeMode('dark')} active={themeMode === 'dark'} />
-                            <MenuItem label="Gray" icon={Cloud} onClick={() => setThemeMode('gray')} active={themeMode === 'gray'} />
-                            <MenuItem label="Light" icon={Sun} onClick={() => setThemeMode('light')} active={themeMode === 'light'} />
-                        </SubMenu>
+                        {/* LAYOUTS */}
 
                         <div className="h-px bg-white/10 my-1 mx-2" />
 

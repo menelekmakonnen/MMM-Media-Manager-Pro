@@ -15,25 +15,25 @@ const TRANSITION_VARIANTS = {
         initial: { opacity: 0 },
         animate: { opacity: 1 },
         exit: { opacity: 0 },
-        transition: { duration: 0.8, ease: "linear" }
+        transition: { duration: 0.3, ease: "linear" }
     },
     slide: {
-        initial: { x: '100%' },
-        animate: { x: 0 },
-        exit: { x: '-100%' },
-        transition: { type: 'spring', damping: 30, stiffness: 200 }
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.3 }
     },
     zoom: {
-        initial: { scale: 0.8, opacity: 0 },
+        initial: { scale: 0.95, opacity: 0 },
         animate: { scale: 1, opacity: 1 },
-        exit: { scale: 1.2, opacity: 0 },
-        transition: { duration: 0.8 }
+        exit: { scale: 1.05, opacity: 0 },
+        transition: { duration: 0.3 }
     },
     swipe: {
-        initial: { x: '100%' },
-        animate: { x: 0 },
-        exit: { x: '-20%', opacity: 0 },
-        transition: { duration: 0.5 }
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.3 }
     }
 };
 
@@ -47,10 +47,14 @@ const SlideshowView = () => {
         slideshowIdle,
         gridColumns, gridRows,
         setCurrentFileIndex,
-        setSlideshowDuration
+        setSlideshowDuration,
+        mediaFitMode,
+        globalIsPlaying, setGlobalIsPlaying
     } = useMediaStore();
 
-    const [isPlaying, setIsPlaying] = useState(true); // Global Play (Video)
+    // Bind global play state
+    const isPlaying = globalIsPlaying;
+    const setIsPlaying = setGlobalIsPlaying;
     const [isAutoAdvance, setIsAutoAdvance] = useState(true); // Duration Timer
 
     const gridSize = (gridColumns || 1) * (gridRows || 1);
@@ -184,12 +188,8 @@ const SlideshowView = () => {
                             if (!file) return null;
                             return (
                                 <motion.div
-                                    layout // Animated layout changes
                                     key={key} // Stable key preserves component instance + state
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.8 }} // Fade out when leaving grid (slot 0 -> gone)
-                                    transition={{ duration: 0.5, ease: "easeInOut" }}
+                                    {...TRANSITION_VARIANTS[slideshowTransition] || TRANSITION_VARIANTS.fade}
                                     className="relative w-full h-full overflow-hidden rounded-xl bg-white/5 border border-white/10 shadow-lg"
                                 >
                                     <SlideItem
@@ -201,6 +201,7 @@ const SlideshowView = () => {
                                         slotIndex={i} // Used for registry ID
                                         hideControls={true}
                                         forcePlay={isPlaying} // Pause/Play
+                                        mediaFitMode={mediaFitMode}
                                     />
                                 </motion.div>
                             );
@@ -240,7 +241,7 @@ const SlideshowView = () => {
     );
 };
 
-const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isActive, hideControls, forcePlay, slotIndex }) => {
+const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isActive, hideControls, forcePlay, slotIndex, mediaFitMode }) => {
     const [url, setUrl] = useState(null);
     const isVideo = file.type === 'video';
 
@@ -290,6 +291,7 @@ const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isAc
                     forcePlay={forcePlay}
                     slotIndex={slotIndex} // This changes as it moves
                     hideControls={hideControls}
+                    mediaFitMode={mediaFitMode}
                 />
             </div>
         );
@@ -299,7 +301,7 @@ const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isAc
         <img
             src={url}
             alt={file.name}
-            className="w-full h-full object-contain"
+            className={clsx("w-full h-full transition-all duration-700", mediaFitMode === 'cover' ? 'object-cover' : 'object-contain')}
             style={{ filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.5))' }}
         />
     );

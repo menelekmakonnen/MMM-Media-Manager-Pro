@@ -7,7 +7,7 @@ import {
     Volume2, VolumeX, Shuffle, RefreshCw,
     LayoutGrid, Grid3X3, Columns3, Grid2X2,
     RotateCw, ZoomIn, EyeOff, Film, ArrowLeftRight,
-    Gauge, ArrowUp, ArrowDown
+    Gauge, ArrowUp, ArrowDown, Pin, Star, X
 } from 'lucide-react';
 import VideoPlayer from '../VideoPlayer';
 import { VideoRegistryContext } from '../../contexts/VideoRegistryContext.js';
@@ -20,31 +20,31 @@ const TRANSITION_VARIANTS = {
         initial: { opacity: 0 },
         animate: { opacity: 1 },
         exit: { opacity: 0 },
-        transition: { duration: 0.4 }
+        transition: { duration: 0.2 }
     },
     slide: {
-        initial: { x: '100%' },
-        animate: { x: 0 },
-        exit: { x: '-100%' },
-        transition: { duration: 0.3, ease: "circOut" }
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.2, ease: "easeOut" }
     },
     swipe: {
-        initial: { x: '100%', opacity: 1 },
-        animate: { x: 0, opacity: 1 },
-        exit: { x: '-100%', opacity: 1 },
-        transition: { duration: 0.3, ease: "circOut" }
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.2, ease: "easeOut" }
     },
     zoom: {
-        initial: { scale: 0.9, opacity: 0 },
+        initial: { scale: 0.95, opacity: 0 },
         animate: { scale: 1, opacity: 1 },
-        exit: { opacity: 0 },
-        transition: { duration: 0.4 }
+        exit: { scale: 1.05, opacity: 0 },
+        transition: { duration: 0.2 }
     },
     flip: {
-        initial: { rotateY: 90, opacity: 0 },
-        animate: { rotateY: 0, opacity: 1 },
-        exit: { rotateY: -90, opacity: 0 },
-        transition: { duration: 0.6 }
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.2 }
     }
 };
 
@@ -72,6 +72,7 @@ const ImageViewer = ({ file, url, isActive, grayscaleInactive, onRandom, rotatio
     const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
     const [isGrayscale, setIsGrayscale] = useState(false);
 
+    const { mediaFitMode } = useMediaStore();
     // State is reset by 'key' prop on the component
 
     const handleMouseDown = (e) => {
@@ -126,7 +127,8 @@ const ImageViewer = ({ file, url, isActive, grayscaleInactive, onRandom, rotatio
                     src={url}
                     alt={file.name}
                     className={clsx(
-                        "w-full h-full object-contain pointer-events-none",
+                        "w-full h-full pointer-events-none transition-all duration-300",
+                        mediaFitMode === 'cover' ? 'object-cover' : 'object-contain',
                         (isGrayscale || (grayscaleInactive && !isActive)) && "grayscale"
                     )}
                 />
@@ -142,8 +144,21 @@ const ImageViewer = ({ file, url, isActive, grayscaleInactive, onRandom, rotatio
     );
 };
 
-const MediaItem = ({ file, isActive, grayscaleInactive, zoomMode, widescreen, onClick, onRandomVideo, masterVolume, isMasterMuted, masterPlaybackRate, rotation, isHero, nextFile, onRotate, onSwapLeft, onSwapRight, slotIndex }) => {
+const MediaItem = ({ 
+    file, isActive, grayscaleInactive, zoomMode, widescreen, 
+    onClick, onDoubleClick, onRandomVideo, 
+    masterVolume, isMasterMuted, masterPlaybackRate, 
+    rotation, isHero, nextFile, onRotate, onSwapLeft, onSwapRight, slotIndex,
+    isPinned, onTogglePin, isFavorite, onToggleFavorite, onRemove
+}) => {
     const [url, setUrl] = useState(null);
+    const videoPlayerRef = useRef(null);
+
+    const handleContextMenu = (e) => {
+        e.preventDefault();
+        const currentTime = videoPlayerRef.current?.getCurrentTime() || 0;
+        useMediaStore.getState().setMediaContextMenu({ x: e.clientX, y: e.clientY, file, currentTime });
+    };
 
     useEffect(() => {
         let objectUrl = null;
@@ -180,15 +195,18 @@ const MediaItem = ({ file, isActive, grayscaleInactive, zoomMode, widescreen, on
             className={clsx(
                 "relative bg-black h-full w-full overflow-hidden transition-all duration-500 group/video shadow-2xl border border-white/5",
                 isHero ? "rounded-3xl z-10 scale-[1.01]" : "rounded-2xl opacity-90 hover:opacity-100 hover:scale-[1.02] z-0",
-                "hover:border-white/20",
-                grayscaleInactive && !isActive && "grayscale hover:grayscale-0 transition-[filter]"
+                isPinned ? "border-[var(--accent-primary)]/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]" : "hover:border-white/20",
+                grayscaleInactive && !isActive && !isPinned && "grayscale hover:grayscale-0 transition-[filter]"
             )}
             onClick={onClick}
+            onDoubleClick={onDoubleClick}
+            onContextMenu={handleContextMenu}
         >
             {isVideo && url ? (
                 <div className="w-full h-full relative">
                     <div className="relative w-full h-full group/controls">
                         <VideoPlayer
+                            ref={videoPlayerRef}
                             file={file}
                             fileUrl={url}
                             isActive={isActive}
@@ -218,10 +236,42 @@ const MediaItem = ({ file, isActive, grayscaleInactive, zoomMode, widescreen, on
                 />
             ) : null}
 
-            {/* Swap Controls (Top Left) */}
+            {/* Top Left Controls: Swap & Pin */}
             <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover/video:opacity-100 transition-opacity z-40 bg-black/60 rounded-lg p-1">
                 <button onClick={(e) => { e.stopPropagation(); onSwapLeft(); }} className="p-1 hover:text-white text-gray-400"><ArrowLeftRight size={14} className="rotate-180" /></button>
                 <button onClick={(e) => { e.stopPropagation(); onSwapRight(); }} className="p-1 hover:text-white text-gray-400"><ArrowLeftRight size={14} /></button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onTogglePin(); }} 
+                    className={clsx("p-1 ml-1 transition-colors", isPinned ? "text-[var(--accent-primary)] drop-shadow-[0_0_5px_rgba(59,130,246,0.8)]" : "text-white/50 hover:text-white")}
+                    title={isPinned ? "Unpin Grid" : "Pin to Grid"}
+                >
+                    <Pin size={14} className={isPinned ? "fill-current" : ""} />
+                </button>
+            </div>
+
+            {/* Top Right Controls: Star & Remove */}
+            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/video:opacity-100 transition-opacity z-40 bg-black/60 rounded-lg p-1">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); useMediaStore.getState().sendToEditor(file); }} 
+                    className="p-1 hover:text-[var(--accent-primary)] text-white/50 transition-colors"
+                    title="Open in Timeline Editor"
+                >
+                    <Film size={14} />
+                </button>
+                 <button 
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }} 
+                    className={clsx("p-1 transition-colors", isFavorite ? "text-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.8)]" : "text-white/50 hover:text-yellow-400")}
+                    title={isFavorite ? "Unstar" : "Star"}
+                >
+                    <Star size={14} className={isFavorite ? "fill-current" : ""} />
+                </button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onRemove(); }} 
+                    className="p-1 hover:text-red-400 text-white/50 transition-colors ml-1"
+                    title="Remove/Exclude"
+                >
+                    <X size={14} />
+                </button>
             </div>
 
             {/* Metadata Overlay */}
@@ -248,7 +298,11 @@ const CenterView = () => {
         getSortedFiles,
         masterPlaybackRate, itemRotations, globalRotation, rotateItem,
         slideshowActive, slideshowDuration, slideshowTransition, superSlideshowActive,
-        nineGridHero, currentFolder
+        nineGridHero, currentFolder, setGridLayout,
+        masterVolume, setMasterVolume, isMasterMuted, setIsMasterMuted,
+        pinnedGrids, togglePin, clearPins, unpinItem,
+        favoriteItems, toggleFavorite, toggleItemExclusion, showJumpButtons,
+        globalIsPlaying, setGlobalIsPlaying
     } = useMediaStore();
 
     const sortedFiles = getSortedFiles();
@@ -259,14 +313,76 @@ const CenterView = () => {
     }, [currentFolder, sortedFiles.length]);
 
     const videoRegistryRef = useRef(new Map());
-    const [masterVolume, setMasterVolume] = useState(0.5);
-    const [isMasterMuted, setIsMasterMuted] = useState(false);
+    // const [masterVolume, setMasterVolume] = useState(0.5); // Removed local state
+    // const [isMasterMuted, setIsMasterMuted] = useState(false); // Removed local state
     const [gridOffsets, setGridOffsets] = useState({});
-    const [isPlaying, setIsPlaying] = useState(false);
+    
+    // Bind global play state
+    const isPlaying = globalIsPlaying;
+    const setIsPlaying = setGlobalIsPlaying;
+    
+    // Pagination Visibility State
+    const [showPagination, setShowPagination] = useState(false);
+    const paginationTimeoutRef = useRef(null);
 
-    // Reset state when folder changes
+    // Auto-show pagination on group change
+    useEffect(() => {
+        if (slideshowActive || !showJumpButtons) return;
+        setShowPagination(true);
+        if (paginationTimeoutRef.current) clearTimeout(paginationTimeoutRef.current);
+        paginationTimeoutRef.current = setTimeout(() => {
+            setShowPagination(false);
+        }, 4000);
+        return () => clearTimeout(paginationTimeoutRef.current);
+    }, [currentFileIndex, slideshowActive, showJumpButtons]);
+
+    const handlePaginationHover = (isHovering) => {
+        if (!showJumpButtons) return;
+        if (isHovering) {
+            setShowPagination(true);
+            if (paginationTimeoutRef.current) clearTimeout(paginationTimeoutRef.current);
+        } else {
+            if (paginationTimeoutRef.current) clearTimeout(paginationTimeoutRef.current);
+            paginationTimeoutRef.current = setTimeout(() => {
+                setShowPagination(false);
+            }, 4000);
+        }
+    };
+
+    // Bubble scrubbing
+    const isScrubbingRef = useRef(false);
+
+    const handlePointerDown = (e) => {
+        isScrubbingRef.current = true;
+        e.target.setPointerCapture(e.pointerId);
+    };
+
+    const handlePointerUp = (e) => {
+        isScrubbingRef.current = false;
+        e.target.releasePointerCapture(e.pointerId);
+    };
+
+    const handlePointerMove = (e) => {
+        if (!isScrubbingRef.current) return;
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        if (el && el.dataset.index !== undefined) {
+            const idx = parseInt(el.dataset.index, 10);
+            const itemsToShow = gridColumns * gridRows;
+            const currentPageNow = Math.floor(useMediaStore.getState().currentFileIndex / itemsToShow);
+            if (idx !== currentPageNow) {
+                useMediaStore.getState().setCurrentFileIndex(idx * itemsToShow);
+                setGridOffsets({});
+            }
+        }
+    };
+
+    // Reset offsets when navigating folders or making large jumps (like next group)
     useEffect(() => {
         setGridOffsets({});
+    }, [currentFolder, currentFileIndex]);
+
+    // Reset playback state on folder change
+    useEffect(() => {
         setCurrentFileIndex(0);
         setIsPlaying(false);
     }, [currentFolder, setCurrentFileIndex]);
@@ -316,7 +432,7 @@ const CenterView = () => {
         }, slideshowDuration * 1000);
 
         return () => clearInterval(interval);
-    }, [slideshowActive, slideshowDuration, nextFile, superSlideshowActive]);
+    }, [slideshowActive, slideshowDuration, nextFile, superSlideshowActive, gridColumns, gridRows]);
 
     // Setup Grid Logic
     const randomizeGrid = () => {
@@ -349,25 +465,56 @@ const CenterView = () => {
         if (gridColumns * gridRows === 1) setCurrentFileIndex(originalIndex);
     }, [setCurrentFileIndex, gridColumns, gridRows]);
 
+    const handleItemDoubleClick = useCallback((originalIndex) => {
+        setCurrentFileIndex(originalIndex);
+        if (gridColumns * gridRows > 1) {
+            setGridLayout(1, 1);
+        }
+    }, [setCurrentFileIndex, gridColumns, gridRows, setGridLayout]);
+
     const cols = gridColumns;
     const rows = gridRows;
     const itemsToShow = cols * rows;
     const baseIndex = currentFileIndex < 0 ? 0 : currentFileIndex % Math.max(1, sortedFiles.length);
 
     const renderFiles = [];
-    if (sortedFiles.length > 0) {
+    const hasFiles = sortedFiles.length > 0;
+    
+    if (hasFiles || Object.keys(pinnedGrids || {}).length > 0) {
+        let unpinnedOffset = 0;
         for (let i = 0; i < itemsToShow; i++) {
-            let index = (baseIndex + i);
-            if (gridOffsets[i]) index += gridOffsets[i];
-            const wrappedIndex = (index % sortedFiles.length + sortedFiles.length) % sortedFiles.length;
-            if (sortedFiles[wrappedIndex]) renderFiles.push({
-                file: sortedFiles[wrappedIndex],
-                originalIndex: wrappedIndex,
-                slotIndex: i,
-                key: sortedFiles[wrappedIndex].path // STABLE KEY for seamless moved playback
-            });
+            if (pinnedGrids && pinnedGrids[i]) {
+                const pFile = pinnedGrids[i];
+                renderFiles.push({
+                    file: pFile,
+                    originalIndex: -1,
+                    slotIndex: i,
+                    key: `pinned-${pFile.path}-${i}`,
+                    isPinned: true
+                });
+            } else if (hasFiles) {
+                let index = (baseIndex + unpinnedOffset);
+                if (gridOffsets[i]) index += gridOffsets[i];
+                const wrappedIndex = (index % sortedFiles.length + sortedFiles.length) % sortedFiles.length;
+                if (sortedFiles[wrappedIndex]) {
+                    renderFiles.push({
+                        file: sortedFiles[wrappedIndex],
+                        originalIndex: wrappedIndex,
+                        slotIndex: i,
+                        // If we are changing groups instantly, we want the DOM to recycle video elements if possible
+                        // Or we just use standard file path keys.
+                        key: sortedFiles[wrappedIndex].path,
+                        isPinned: false
+                    });
+                }
+                unpinnedOffset++;
+            }
         }
     }
+
+    // Bubble Pagination calculations
+    const totalPages = itemsToShow > 0 ? Math.ceil(Math.max(1, sortedFiles.length) / itemsToShow) : 1;
+    const currentPage = itemsToShow > 0 ? Math.floor(currentFileIndex / itemsToShow) : 0;
 
     const contextValue = React.useMemo(() => ({
         videos: {}, // Handled by VideoRegistryContext
@@ -397,15 +544,30 @@ const CenterView = () => {
                 <SlideshowOverlay />
 
                 <div className="flex-1 p-4 min-h-0 bg-[var(--bg-primary)]/50 backdrop-blur-sm relative">
-                    <div key={currentFolder} className="h-full w-full grid gap-2 transition-all duration-300" style={gridStyle}>
-                        <AnimatePresence mode="popLayout" initial={false}>
-                            {renderFiles.map(({ file, originalIndex, slotIndex, key }, i) => (
-                                <motion.div
-                                    key={key}
-                                    layout
-                                    {...variant}
-                                    className="w-full h-full"
+                    
+                        {/* Clear Pins Floating Button */}
+                        <AnimatePresence>
+                            {pinnedGrids && Object.keys(pinnedGrids).length > 0 && (
+                                <motion.button
+                                    initial={{ opacity: 0, y: -20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -20 }}
+                                    onClick={clearPins}
+                                    className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[var(--bg-secondary)] border border-[var(--accent-primary)]/50 text-[var(--text-primary)] px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.2)] hover:bg-[var(--accent-primary)]/20 transition-all text-xs font-bold tracking-wider uppercase flex items-center gap-2"
                                 >
+                                    <Pin size={12} className="rotate-45" /> Clear Pinned Grids
+                                </motion.button>
+                            )}
+                        </AnimatePresence>
+
+                        <div key={currentFolder} className="h-full w-full grid gap-2 transition-all duration-200" style={gridStyle}>
+                            <AnimatePresence initial={false}>
+                                {renderFiles.map(({ file, originalIndex, slotIndex, key, isPinned }, i) => (
+                                    <motion.div
+                                        key={key}
+                                        {...variant}
+                                        className="w-full h-full"
+                                    >
                                     <MediaItem
                                         file={file}
                                         isActive={originalIndex === currentFileIndex}
@@ -414,6 +576,7 @@ const CenterView = () => {
                                         widescreen={widescreen}
                                         slotIndex={slotIndex}
                                         onClick={() => handleItemClick(originalIndex)}
+                                        onDoubleClick={() => handleItemDoubleClick(originalIndex)}
                                         onRandomVideo={() => swapToRandomVideo(slotIndex)}
                                         onRotate={() => rotateItem(file.path, ((itemRotations[file.path] || 0) + 90))}
                                         onSwapLeft={() => handleSwap(slotIndex, -1)}
@@ -424,11 +587,60 @@ const CenterView = () => {
                                         rotation={(itemRotations[file.path] || 0) + globalRotation}
                                         isHero={isHeroGrid && (is3x3Hero ? i === 4 : i === 1)}
                                         nextFile={nextFile}
+                                        isPinned={isPinned}
+                                        onTogglePin={() => togglePin(slotIndex, file)}
+                                        isFavorite={favoriteItems && favoriteItems.includes(file.path)}
+                                        onToggleFavorite={() => toggleFavorite(file.path)}
+                                        onRemove={() => {
+                                            toggleItemExclusion(file.path);
+                                            if (isPinned) unpinItem(slotIndex);
+                                        }}
                                     />
                                 </motion.div>
                             ))}
                         </AnimatePresence>
                     </div>
+
+                    {/* Bubble Pagination Overlay */}
+                    {totalPages > 1 && !slideshowActive && (
+                        <div 
+                            className="absolute bottom-0 inset-x-0 h-24 flex items-end justify-center pb-6 z-50"
+                            onMouseEnter={() => handlePaginationHover(true)}
+                            onMouseLeave={() => handlePaginationHover(false)}
+                        >
+                            <div 
+                                className={clsx(
+                                    "flex items-center gap-1 p-2 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 transition-all duration-500 max-w-[80vw] sm:max-w-[400px] w-full touch-none shadow-2xl overflow-hidden",
+                                    (showJumpButtons || showPagination) ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+                                )}
+                                onPointerDown={handlePointerDown}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={handlePointerUp}
+                                onPointerCancel={handlePointerUp}
+                            >
+                                {Array.from({ length: Math.min(totalPages, 50) }).map((_, idx) => (
+                                    <button
+                                        key={idx}
+                                        data-index={idx}
+                                        onClick={() => {
+                                            if (!isScrubbingRef.current) {
+                                                useMediaStore.getState().setCurrentFileIndex(idx * itemsToShow);
+                                                setGridOffsets({});
+                                            }
+                                        }}
+                                        className={clsx(
+                                            "h-1.5 rounded-full transition-all duration-300 cursor-pointer",
+                                            idx === currentPage 
+                                                ? "flex-[2.5] bg-[var(--accent-primary)] shadow-[0_0_12px_var(--accent-primary)]" 
+                                                : "flex-1 bg-white/20 hover:bg-white/60 hover:flex-[1.5]"
+                                        )}
+                                        title={`Page ${idx + 1}`}
+                                    />
+                                ))}
+                                {totalPages > 50 && <span className="text-[10px] text-white/50 ml-1 font-bold flex-shrink-0">...</span>}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {!slideshowActive && (

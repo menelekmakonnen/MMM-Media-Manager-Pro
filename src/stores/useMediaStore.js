@@ -9,11 +9,18 @@ const useMediaStore = create(persist((set, get) => ({
     activeFolders: [], // Array of selected folder paths
     files: [],
     currentFileIndex: -1,
+    excludedFolders: [],
+    excludedItems: [],
+    favoriteItems: [],
+    favoritesOnly: false,
+    pinnedGrids: {},
+    mediaContextMenu: null,
 
     // === FILTERING ===
     fileTypeFilter: ['video'], // Default to video per request
     appViewMode: 'standard', // 'standard' | 'gallery' | 'slideshow' | 'fullscreen'
     previousViewMode: 'standard', // For backing out of slideshow
+    mediaFitMode: 'contain', // 'contain' | 'cover' - Global setting for media fitting
 
     // === GALLERY STATE ===
     galleryZoom: 200,
@@ -118,7 +125,7 @@ const useMediaStore = create(persist((set, get) => ({
 
         const now = Date.now();
         const lastTime = _lastProcTime || 0;
-        const delay = isScanning ? 1500 : 100; // Increased scan throttle to 1.5s
+        const delay = isScanning ? 2500 : 100; // Increased scan throttle to 2.5s for massive folders
 
         // If immediate or enough time passed, run now
         if (immediate || (now - lastTime > delay)) {
@@ -142,19 +149,61 @@ const useMediaStore = create(persist((set, get) => ({
         set({ explorerSearchQuery: query });
         get().updateProcessedFiles();
     },
+    
+    // === SETTINGS VIEW CONFIGURATIONS ===
+    defaultGridCount: 1, setDefaultGridCount: (c) => set({ defaultGridCount: c }),
+    cinemaModeOnLaunch: false, setCinemaModeOnLaunch: (v) => set({ cinemaModeOnLaunch: v }),
+    continuousPlayback: true, setContinuousPlayback: (v) => set({ continuousPlayback: v }),
+    slideTransitionEffect: 'fade', setSlideTransitionEffect: (v) => set({ slideTransitionEffect: v }),
+    slideshowCursorHide: true, setSlideshowCursorHide: (v) => set({ slideshowCursorHide: v }),
+    galleryDefaultZoom: 200, setGalleryDefaultZoom: (v) => set({ galleryDefaultZoom: v }),
+    galleryDisplayMode: 'both', setGalleryDisplayMode: (v) => set({ galleryDisplayMode: v }),
+    metadataOverlayGallery: true, setMetadataOverlayGallery: (v) => set({ metadataOverlayGallery: v }),
+    editorAutoSave: true, setEditorAutoSave: (v) => set({ editorAutoSave: v }),
+    editorDefaultTransition: 500, setEditorDefaultTransition: (v) => set({ editorDefaultTransition: v }),
+    hardwareAcceleration: true, setHardwareAcceleration: (v) => set({ hardwareAcceleration: v }),
+    settingsStartupTab: 'general', setSettingsStartupTab: (v) => set({ settingsStartupTab: v }),
+    showSettingsTooltips: true, setShowSettingsTooltips: (v) => set({ showSettingsTooltips: v }),
+
+    keyboardBindings: {
+        playPause: ' ', // Space
+        nextItem: 'ArrowRight',
+        prevItem: 'ArrowLeft',
+        nextGroup: ['Control', 'ArrowRight'],
+        prevGroup: ['Control', 'ArrowLeft'],
+        volumeUp: 'ArrowUp',
+        volumeDown: 'ArrowDown',
+        scrollUp: 'ArrowUp', // Gallery View
+        scrollDown: 'ArrowDown', // Gallery View
+        grid1: '1', grid2: '2', grid3: '3', grid4: '4',
+        grid6: '6', grid9: '9', grid12: '5'
+    },
+    setKeyboardBinding: (action, keyCombo) => set(state => ({
+        keyboardBindings: { ...state.keyboardBindings, [action]: keyCombo }
+    })),
+    
+    // === GLOBAL PLAYBACK STATE ===
+    globalIsPlaying: false,
+    setGlobalIsPlaying: (playing) => set({ globalIsPlaying: playing }),
+    toggleGlobalPlay: () => set(state => ({ globalIsPlaying: !state.globalIsPlaying })),
+
     globalViewMode: 'normal',
     fullscreenMode: false,
     movieMode: false,
+    cinemaMode: false, // New: Hides sidebars & thins controls
     viewMode: 'single', // 'single' | 'grid' | 'custom'
     explorerViewMode: 'grid',
     sidebarViewMode: 'grid',
     sidebarGridColumns: 3,
     gridColumns: 1,
     gridRows: 1,
-    theme: 'default',
+    theme: 'outer-space',
     themeMode: 'dark',
+    toggleThemeMode: () => set(state => ({ themeMode: state.themeMode === 'dark' ? 'deep' : 'dark' })),
     threeGridEqual: false,
+    setThreeGridEqual: (val) => set({ threeGridEqual: val }),
     nineGridHero: false,
+    setNineGridHero: (val) => set({ nineGridHero: val }),
 
     // === MASONRY STATE ===
     masonryScrollPosition: 0,
@@ -173,15 +222,28 @@ const useMediaStore = create(persist((set, get) => ({
     },
 
     // === DISPLAY OPTIONS ===
+    showJumpButtons: false,
+    toggleJumpButtons: () => set(state => ({ showJumpButtons: !state.showJumpButtons })),
     grayscaleInactive: false,
+    setGrayscaleInactive: (val) => set({ grayscaleInactive: val }),
     thumbnailSize: 120,
+    setThumbnailSize: (size) => set({ thumbnailSize: size }),
     thumbnailOrientation: 'vertical',
+    setThumbnailOrientation: (ori) => set({ thumbnailOrientation: ori }),
     zoomMode: 'fit',
     widescreen: false,
+    setWidescreen: (val) => set({ widescreen: val }),
     explorerGridColumns: 3,
     showDuplicates: false,
+    setShowDuplicates: (val) => set(state => {
+        const newState = { showDuplicates: val };
+        // Trigger file refresh if changing duplicate visibility
+        setTimeout(() => useMediaStore.getState().updateProcessedFiles(), 0);
+        return newState;
+    }),
     slideshowActive: false,
     slideshowRandom: false,
+    setSlideshowRandom: (val) => set({ slideshowRandom: val }),
 
     setExplorerGridColumns: (cols) => set({ explorerGridColumns: cols }),
 
@@ -191,13 +253,34 @@ const useMediaStore = create(persist((set, get) => ({
     setGalleryViewMode: (mode) => set({ galleryViewMode: mode }),
     setGalleryOrientation: (orientation) => set({ galleryOrientation: orientation }),
     getGalleryFiles: () => {
-        const { files, activeFolders, showDuplicates, metadataFilters } = get();
+        const { files, activeFolders, showDuplicates, metadataFilters, excludedFolders, excludedItems } = get();
         let filtered = files;
 
-        // Folder check (must respect this)
+        // Apply Exclusions
+        if (excludedItems && excludedItems.length > 0) {
+            const itemSet = new Set(excludedItems);
+            filtered = filtered.filter(f => !itemSet.has(f.path));
+        }
+        if (excludedFolders && excludedFolders.length > 0) {
+            filtered = filtered.filter(f => {
+                return !excludedFolders.some(folder => f.folderPath === folder || f.folderPath?.startsWith(folder + '/'));
+            });
+        }
+
+        const favOnly = get().favoritesOnly;
+        const favs = get().favoriteItems;
+        if (favOnly) {
+            if (favs && favs.length > 0) {
+                const favSet = new Set(favs);
+                filtered = filtered.filter(f => favSet.has(f.path));
+            } else {
+                filtered = [];
+            }
+        }
+
         const folderSet = activeFolders && activeFolders.length > 0 ? new Set(activeFolders) : null;
         if (folderSet) {
-            filtered = files.filter(f => {
+            filtered = filtered.filter(f => {
                 if (folderSet.has(f.folderPath)) return true;
                 for (const af of activeFolders) {
                     if (f.folderPath?.startsWith(af + '/')) return true;
@@ -209,9 +292,11 @@ const useMediaStore = create(persist((set, get) => ({
         // Apply Metadata Filters for parity
         if (metadataFilters.aspectRatio !== 'all') {
             filtered = filtered.filter(f => {
-                const w = f.width || (f.type === 'video' ? 1920 : 1500);
-                const h = f.height || (f.type === 'video' ? 1080 : 1000);
+                // Determine aspect ratio, default to landscape if missing but allow fallback
+                const w = f.width || (f.hasVideos ? 1920 : 1500); 
+                const h = f.height || (f.hasVideos ? 1080 : 1000);
                 const ar = w / h;
+                
                 if (metadataFilters.aspectRatio === 'landscape') return ar > 1.2;
                 if (metadataFilters.aspectRatio === 'portrait') return ar < 0.8;
                 if (metadataFilters.aspectRatio === 'square') return ar >= 0.8 && ar <= 1.2;
@@ -248,6 +333,50 @@ const useMediaStore = create(persist((set, get) => ({
         appViewMode: mode,
         previousViewMode: state.appViewMode !== mode ? state.appViewMode : state.previousViewMode
     })),
+    setMediaContextMenu: (menu) => set({ mediaContextMenu: menu }),
+
+    sendToEditor: async (mediaItem, currentFrame = 0, fullClip = false) => {
+        const { useClipStore } = await import('./clipStore');
+        const clipStore = useClipStore.getState();
+        const fps = 30; // default assumptions
+        const durationFrames = mediaItem.duration ? Math.ceil(mediaItem.duration * fps) : 150; // default 5s
+        
+        let startF = 0;
+        let endF = durationFrames;
+        
+        if (!fullClip && currentFrame > 0) {
+            startF = currentFrame;
+        }
+
+        const newClip = {
+            id: crypto.randomUUID(),
+            mediaLibraryId: mediaItem.id || mediaItem.path,
+            type: mediaItem.type,
+            path: mediaItem.path,
+            filename: mediaItem.name || mediaItem.filename,
+            startFrame: clipStore.clips.reduce((max, c) => Math.max(max, c.endFrame), 0), // Append to end
+            endFrame: clipStore.clips.reduce((max, c) => Math.max(max, c.endFrame), 0) + (endF - startF),
+            sourceDurationFrames: durationFrames,
+            trimStartFrame: startF,
+            trimEndFrame: endF,
+            track: 1,
+            speed: 1,
+            volume: 100,
+            reversed: false,
+            isMuted: false,
+            isPinned: false,
+            origin: "manual",
+            locked: false
+        };
+        clipStore.addClip(newClip);
+        clipStore.selectSingleClip(newClip.id);
+        
+        // Switch view last
+        set(state => ({
+            appViewMode: 'editor',
+            previousViewMode: state.appViewMode !== 'editor' ? state.appViewMode : state.previousViewMode
+        }));
+    },
 
     startSlideshowAt: (path) => {
         const { processedFiles, setCurrentFileIndex, setAppViewMode } = get();
@@ -284,7 +413,65 @@ const useMediaStore = create(persist((set, get) => ({
     },
     setFiles: (files) => set({ files }),
     clearFiles: () => set({ files: [], folders: [], currentFileIndex: -1, currentFolder: null, activeFolders: [] }),
-    addFiles: (newFiles) => set((state) => ({ files: [...state.files, ...newFiles] })),
+    addFiles: (newFiles) => set((state) => ({ files: state.files.concat(newFiles) })),
+
+    // === ACTIONS: Exclusions ===
+    toggleFolderExclusion: (path) => {
+        set((state) => {
+            const current = new Set(state.excludedFolders);
+            if (current.has(path)) current.delete(path);
+            else current.add(path);
+            return { excludedFolders: Array.from(current) };
+        });
+        get().updateProcessedFiles();
+    },
+    toggleItemExclusion: (path) => {
+        set((state) => {
+            const current = new Set(state.excludedItems);
+            if (current.has(path)) current.delete(path);
+            else current.add(path);
+            return { excludedItems: Array.from(current) };
+        });
+        get().updateProcessedFiles();
+    },
+    clearExclusions: () => {
+        set({ excludedFolders: [], excludedItems: [] });
+        get().updateProcessedFiles();
+    },
+
+    // === ACTIONS: Favorites & Pins ===
+    toggleFavorite: (path) => {
+        set((state) => {
+            const current = new Set(state.favoriteItems || []);
+            if (current.has(path)) current.delete(path);
+            else current.add(path);
+            return { favoriteItems: Array.from(current) };
+        });
+        get().updateProcessedFiles();
+    },
+    setFavoritesOnly: (val) => {
+        set({ favoritesOnly: val });
+        get().updateProcessedFiles();
+    },
+    togglePin: (slotIndex, file) => {
+        set((state) => {
+            const current = { ...(state.pinnedGrids || {}) };
+            if (current[slotIndex] && current[slotIndex].path === file.path) {
+                delete current[slotIndex];
+            } else {
+                current[slotIndex] = file;
+            }
+            return { pinnedGrids: current };
+        });
+    },
+    clearPins: () => set({ pinnedGrids: {} }),
+    unpinItem: (slotIndex) => {
+        set((state) => {
+            const current = { ...(state.pinnedGrids || {}) };
+            delete current[slotIndex];
+            return { pinnedGrids: current };
+        });
+    },
 
     // === ACTIONS: Filtering ===
     setFileTypeFilter: (type) => {
@@ -345,16 +532,29 @@ const useMediaStore = create(persist((set, get) => ({
 
     // Skip by grid size (for groups)
     skipGroup: (direction = 1) => {
-        const { gridColumns, gridRows, currentFileIndex } = get();
+        const { gridColumns, gridRows, currentFileIndex, pinnedGrids } = get();
         const sorted = get().getSortedFiles();
         if (sorted.length === 0) return;
 
-        const groupSize = gridColumns * gridRows;
-        const newIndex = currentFileIndex + (groupSize * direction);
+        // How many slots are actually advancing? (Subtract pinned slots)
+        const totalSlots = gridColumns * gridRows;
+        const activePins = Object.keys(pinnedGrids || {}).length;
+        const advanceCount = Math.max(1, totalSlots - activePins);
 
-        // Wrap around
-        const wrappedIndex = ((newIndex % sorted.length) + sorted.length) % sorted.length;
-        set({ currentFileIndex: wrappedIndex });
+        let newIndex;
+        if (direction > 0) {
+            newIndex = (currentFileIndex + advanceCount) % sorted.length;
+        } else {
+            newIndex = (currentFileIndex - advanceCount + sorted.length * advanceCount) % sorted.length;
+        }
+
+        set({ currentFileIndex: newIndex });
+
+        // Auto-load more items if we zoom past the virtualization threshold
+        const { visibleLimit, showMoreItems } = get();
+        if (newIndex >= visibleLimit) {
+            showMoreItems();
+        }
     },
 
     // === ACTIONS: View Modes ===
@@ -362,6 +562,7 @@ const useMediaStore = create(persist((set, get) => ({
     setFullscreenMode: (val) => set({ fullscreenMode: val }),
     toggleFullscreen: () => set((state) => ({ fullscreenMode: !state.fullscreenMode })),
     toggleMovieMode: () => set((state) => ({ movieMode: !state.movieMode })),
+    toggleCinemaMode: () => set((state) => ({ cinemaMode: !state.cinemaMode })), // Action
     setViewMode: (mode) => set({ viewMode: mode }),
     setExplorerViewMode: (mode) => set({ explorerViewMode: mode }),
     setSidebarViewMode: (mode) => set({ sidebarViewMode: mode }),
@@ -370,6 +571,10 @@ const useMediaStore = create(persist((set, get) => ({
     setThemeMode: () => set({ themeMode: 'dark' }), // Enforced Dark Mode
     toggleSlideshow: () => set((state) => ({ slideshowActive: !state.slideshowActive })),
     setSlideshowRandom: (val) => set({ slideshowRandom: val }),
+    toggleMediaFitMode: () => set((state) => {
+        const newMode = state.mediaFitMode === 'cover' ? 'contain' : 'cover';
+        return { mediaFitMode: newMode };
+    }),
 
     // === ACTIONS: Sorting ===
     setSortStack: (stack) => {
@@ -377,6 +582,10 @@ const useMediaStore = create(persist((set, get) => ({
         get().updateProcessedFiles();
     },
     toggleSort: (field) => {
+        if (field === 'random') {
+            get().shuffleFiles();
+            return;
+        }
         set((state) => {
             const existing = state.sortStack.find(s => s.field === field);
             if (existing) {
@@ -387,7 +596,16 @@ const useMediaStore = create(persist((set, get) => ({
         get().updateProcessedFiles();
     },
 
-    // === ACTIONS: Metadata ===
+    shuffleFiles: () => {
+        set((state) => ({
+            shuffleSeed: (state.shuffleSeed || 0) + 1,
+            sortStack: [{ field: 'random', order: 'asc' }],
+            currentFileIndex: 0
+        }));
+        get().updateProcessedFiles(true);
+    },
+
+    // ... ACTIONS: Metadata ...
     setMetadataFilters: (filters) => {
         set((state) => ({ metadataFilters: { ...state.metadataFilters, ...filters } }));
         get().updateProcessedFiles();
@@ -399,7 +617,7 @@ const useMediaStore = create(persist((set, get) => ({
         get().updateProcessedFiles();
     },
 
-    // === GRID TOGGLES ===
+    // ... GRID TOGGLES ...
     // Cycles: Returns next state based on current columns/rows
     toggleDual: () => set((state) => {
         // Cycle: 2x1 (SideBySide) -> 1x2 (Stacked) -> 2x1
@@ -444,6 +662,13 @@ const useMediaStore = create(persist((set, get) => ({
         return { gridColumns: 3, gridRows: 3, nineGridHero: false, viewMode: 'custom' };
     }),
 
+    toggleTwelve: () => set((state) => {
+        // Cycle: 4x3 (Horizontal) -> 3x4 (Vertical)
+        const is4x3 = state.gridColumns === 4 && state.gridRows === 3;
+        if (is4x3) return { gridColumns: 3, gridRows: 4, viewMode: 'custom' };
+        return { gridColumns: 4, gridRows: 3, viewMode: 'custom' };
+    }),
+
     setSortOrder: (order) => {
         set({ sortOrder: order });
         get().updateProcessedFiles();
@@ -457,7 +682,11 @@ const useMediaStore = create(persist((set, get) => ({
         get().updateProcessedFiles();
     },
     shuffleFiles: () => {
-        set((state) => ({ sortBy: 'random', shuffleSeed: state.shuffleSeed + 1 }));
+        set((state) => ({
+            sortBy: 'random',
+            sortStack: [{ field: 'random', order: 'asc' }],
+            shuffleSeed: state.shuffleSeed + 1
+        }));
         get().updateProcessedFiles();
     },
     setFolderSortMode: (mode) => set({ folderSortMode: mode }),
@@ -487,9 +716,8 @@ const useMediaStore = create(persist((set, get) => ({
 
     // === FOLDER ACTIONS (Extended) ===
     addFilesOnly: (newFiles) => set((state) => {
-        const existingPaths = new Set(state.files.map(f => f.path));
-        const unique = newFiles.filter(f => !existingPaths.has(f.path));
-        return { files: [...state.files, ...unique] };
+        // Optimization: Removed O(N^2) Set mapping loop. Rely on standard duplicate filtering instead to maintain UI speed on 77k+ appends.
+        return { files: state.files.concat(newFiles) };
     }),
     addFoldersOnly: (newFolders) => set((state) => {
         const folderMap = new Map(state.folders.map(f => [f.path, f]));
@@ -499,21 +727,40 @@ const useMediaStore = create(persist((set, get) => ({
 
     // === COMPUTED: Sorted Files ===
     calculateSortedFiles: () => {
-        const { files, folders, fileTypeFilter, sortStack, activeFolders, explorerSearchQuery, showDuplicates } = get();
+        const { files, folders, fileTypeFilter, sortStack, activeFolders, explorerSearchQuery, showDuplicates, excludedFolders, excludedItems } = get();
+
+        // 0. Filter by Exclusions
+        let filtered = files;
+        if (excludedItems && excludedItems.length > 0) {
+            const itemSet = new Set(excludedItems);
+            filtered = filtered.filter(f => !itemSet.has(f.path));
+        }
+        if (excludedFolders && excludedFolders.length > 0) {
+            filtered = filtered.filter(f => {
+                return !excludedFolders.some(folder => f.folderPath === folder || f.folderPath?.startsWith(folder + '/'));
+            });
+        }
+
+        // 0.5 Filter by Favorites
+        const favOnly = get().favoritesOnly;
+        const favs = get().favoriteItems;
+        if (favOnly) {
+            if (favs && favs.length > 0) {
+                const favSet = new Set(favs);
+                filtered = filtered.filter(f => favSet.has(f.path));
+            } else {
+                filtered = [];
+            }
+        }
 
         // 1. Filter by Active Folders (if any)
-        let filtered = files;
         if (activeFolders && activeFolders.length > 0) {
-            // DEBUG: Log filtering attempt
-            console.log('[useMediaStore] Filtering by Active Folders:', activeFolders, 'Total Files:', files.length);
-
             const folderSet = new Set(activeFolders);
-            filtered = files.filter(f => {
+            filtered = filtered.filter(f => {
                 if (folderSet.has(f.folderPath)) return true;
                 // Optimization: Avoid startsWith for every file if possible
                 return activeFolders.some(folder => f.folderPath?.startsWith(folder + '/'));
             });
-            console.log('[useMediaStore] Filtered Result:', filtered.length);
         }
 
         // 2. Filter by Type (Multi-select)
@@ -582,6 +829,32 @@ const useMediaStore = create(persist((set, get) => ({
         }
 
         // 5. Multi-Sort
+        if (sortStack && sortStack.length > 0 && sortStack[0].field === 'random') {
+            const { shuffleSeed } = get();
+            
+            // Simple robust hash for consistent but randomized order based on seed
+            const hashString = (raw) => {
+                const str = String(raw); // Force to string to prevent .length crash on numbers
+                let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+                for (let i = 0, ch; i < str.length; i++) {
+                    ch = str.charCodeAt(i);
+                    h1 = Math.imul(h1 ^ ch, 2654435761);
+                    h2 = Math.imul(h2 ^ ch, 1597334677);
+                }
+                h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+                return (h1 >>> 0);
+            };
+
+            return [...filtered].sort((a, b) => {
+                // Ensure unique combinations of strings and fallback IDs
+                const strA = `${a.path || a.name || 'a'}_${shuffleSeed}`;
+                const strB = `${b.path || b.name || 'b'}_${shuffleSeed}`;
+                const hashA = hashString(strA);
+                const hashB = hashString(strB);
+                return hashA - hashB;
+            });
+        }
+
         return [...filtered].sort((a, b) => {
             if (!sortStack || sortStack.length === 0) return 0;
 
@@ -628,6 +901,8 @@ const useMediaStore = create(persist((set, get) => ({
         showDuplicates: state.showDuplicates,
         folderSortMode: state.folderSortMode,
         sortStack: state.sortStack,
+        mediaFitMode: state.mediaFitMode, // persist preference
+        showJumpButtons: state.showJumpButtons,
         metadataFilters: state.metadataFilters,
         fileTypeFilter: state.fileTypeFilter,
         threeGridEqual: state.threeGridEqual,
@@ -640,7 +915,11 @@ const useMediaStore = create(persist((set, get) => ({
         slideshowDuration: state.slideshowDuration,
         slideshowTransition: state.slideshowTransition,
         masterVolume: state.masterVolume,
-        isMasterMuted: state.isMasterMuted
+        isMasterMuted: state.isMasterMuted,
+        excludedFolders: state.excludedFolders,
+        excludedItems: state.excludedItems,
+        favoriteItems: state.favoriteItems,
+        favoritesOnly: state.favoritesOnly
     }),
 }));
 

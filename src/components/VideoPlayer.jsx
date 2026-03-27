@@ -1,16 +1,22 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Play, Pause, Volume2, VolumeX, RefreshCw, RotateCcw, FastForward, Rewind, Shuffle } from 'lucide-react';
 import { useVideoRegistry } from '../contexts/VideoRegistryContext.js';
+import useMediaStore from '../stores/useMediaStore.js';
 import clsx from 'clsx';
 
-const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, masterVolume, isMasterMuted, masterPlaybackRate, rotation, onEnded, forcePlay, slotIndex, hideControls }) => {
+const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, masterVolume, isMasterMuted, masterPlaybackRate, rotation, onEnded, forcePlay, slotIndex, hideControls }, ref) => {
     const videoRef = useRef(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [localRate, setLocalRate] = useState(null); // Override master if set
     const { register, unregister } = useVideoRegistry();
+    const { mediaFitMode } = useMediaStore();
 
     const effectiveRate = localRate !== null ? localRate : (masterPlaybackRate || 1);
+
+    useImperativeHandle(ref, () => ({
+        getCurrentTime: () => videoRef.current?.currentTime || 0
+    }));
 
     // Register video with parent context
     // Register video with parent context
@@ -137,13 +143,21 @@ const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, ma
         setLocalRate(next);
     };
 
+    const isRotatedAxis = typeof rotation === 'number' ? (rotation % 180 !== 0) : false;
+
     return (
-        <div className="absolute inset-0 bg-black group-hover:bg-black/90 transition-colors group overflow-hidden">
+        <div className="absolute inset-0 bg-black group-hover:bg-black/90 transition-colors group overflow-hidden flex items-center justify-center">
             <video
                 ref={videoRef}
                 src={fileUrl}
-                className="w-full h-full object-contain transition-transform duration-300"
-                style={{ transform: `rotate(${rotation || 0}deg)` }}
+                className={clsx(
+                    "transition-all duration-300 pointer-events-none",
+                    isRotatedAxis ? "w-[177.77%] max-w-none h-auto" : "w-full h-full"
+                )}
+                style={{ 
+                    transform: `rotate(${rotation || 0}deg) ${isRotatedAxis ? 'scale(1)' : ''}`,
+                    objectFit: isRotatedAxis ? 'cover' : mediaFitMode
+                }}
                 loop={shouldLoop}
                 muted={isMuted || isMasterMuted || masterVolume === 0}
                 playsInline
@@ -157,17 +171,13 @@ const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, ma
 
                     {/* Skip Controls Row - Responsive Wrap */}
                     <div className="flex flex-wrap justify-center items-center gap-1 bg-black/60 backdrop-blur rounded-full px-2 py-1 mb-1 max-w-[95%]">
-                        <button onClick={(e) => { e.stopPropagation(); handleSkip(-300); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">-5m</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleSkip(-120); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">-2m</button>
                         <button onClick={(e) => { e.stopPropagation(); handleSkip(-30); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">-30s</button>
                         <button onClick={(e) => { e.stopPropagation(); handleSkip(-5); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">-5s</button>
 
                         <div className="w-px h-3 bg-white/20 mx-1 hidden sm:block"></div>
 
-                        <button onClick={(e) => { e.stopPropagation(); handleSkip(10); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">+10s</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleSkip(120); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+2m</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleSkip(300); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+5m</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleSkip(600); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+10m</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(5); }} className="p-1 px-1.5 text-[9px] text-gray-300 hover:text-white transition-colors">+5s</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSkip(30); }} className="p-1 px-1.5 text-[9px] font-bold text-gray-400 hover:text-white transition-colors">+30s</button>
                     </div>
 
                     {/* Main Action Row - Persistent or Easier Access */}
@@ -213,6 +223,6 @@ const VideoPlayer = ({ file, fileUrl, isActive, onRandomVideo, onShuffleGrid, ma
             )}
         </div>
     );
-};
+});
 
 export default VideoPlayer;

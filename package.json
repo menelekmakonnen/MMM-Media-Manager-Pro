@@ -1,23 +1,24 @@
 {
-  "name": "mmm-media-manager-pro",
+  "name": "mmmedia-darkroom",
   "private": true,
   "version": "2.0.0",
   "description": "Complete Product Specification - Professional Media Management",
-  "author": "Menelek Makonnen (ICUNI Group)",
+  "author": "Menelek Makonnen",
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --force",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:9797 && electron .\"",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:9797 && .\\run_electron.bat\"",
     "electron:build": "npm run build && electron-builder"
   },
   "build": {
-    "appId": "com.icunigroup.mmmdmgrpro",
-    "productName": "MMM Media Manager Pro",
-    "executableName": "MMM-Media-Manager-Pro",
+    "appId": "com.icunigroup.mmmediadarkroom",
+    "productName": "MMMedia Darkroom",
+    "executableName": "MMMedia-Darkroom",
+    "copyright": "Developed by ICUNI Labs. Author: Menelek Makonnen",
     "directories": {
       "output": "dist_electron"
     },
@@ -28,6 +29,8 @@
     ],
     "icon": "public/icon.png",
     "win": {
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false,
       "target": [
         "nsis",
         "portable",
@@ -41,12 +44,16 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MMM Media Manager Pro",
-      "uninstallDisplayName": "MMM Media Manager Pro Uninstall"
+      "shortcutName": "MMMedia Darkroom",
+      "uninstallDisplayName": "MMMedia Darkroom Uninstall"
     }
   },
   "dependencies": {
+    "@types/seedrandom": "^3.0.8",
+    "@types/uuid": "^10.0.0",
     "clsx": "^2.1.1",
+    "ffmpeg-static": "^5.3.0",
+    "fluent-ffmpeg": "^2.1.3",
     "framer-motion": "^11.18.2",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^0.469.0",
@@ -55,7 +62,9 @@
     "react-resizable-panels": "^3.0.6",
     "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^2.2.3",
+    "seedrandom": "^3.0.5",
     "tailwind-merge": "^2.6.0",
+    "uuid": "^13.0.0",
     "zustand": "5.0.9"
   },
   "devDependencies": {

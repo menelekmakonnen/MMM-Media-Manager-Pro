@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
-import { FolderOpen, Folder, ChevronRight, ChevronDown, List, Grid, Search, RefreshCw, BarChart2, Clock, History, Film, Image as ImageIcon, Zap, Plus, XOctagon } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
+import { FolderOpen, Folder, ChevronRight, ChevronDown, List, Grid, Search, RefreshCw, BarChart2, Clock, History, Film, Image as ImageIcon, Zap, Plus, XOctagon, EyeOff, Eye, Trash2, Play } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
 import { clearThumbnailCache, getCachedUrl, getThumbnailUrl } from '../../utils/thumbnailCache';
 import { getSavedFolderHandle, verifyPermission, getRecentLibraries } from '../../utils/persistence';
@@ -13,9 +13,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 
 // --- Folder TREE Item (List View) ---
-const FolderTreeItem = ({ folder, depth = 0, allFolders, filterMode, folderSortMode, expandSignal }) => { // Added props
+const FolderTreeItem = ({ folder, depth = 0, allFolders, filterMode, folderSortMode, expandSignal }) => {
     const [expanded, setExpanded] = useState(false); // Default false, controlled by effect
-    const { currentFolder, activeFolders, setCurrentFolder, toggleActiveFolder } = useMediaStore();
+    const { currentFolder, activeFolders, setCurrentFolder, toggleActiveFolder, excludedFolders, toggleFolderExclusion } = useMediaStore();
 
     const children = useMemo(() => {
         const rawChildren = allFolders.filter(f => {
@@ -72,6 +72,7 @@ const FolderTreeItem = ({ folder, depth = 0, allFolders, filterMode, folderSortM
     const hasChildren = children.length > 0;
     const isSelected = activeFolders && activeFolders.includes(folder.path);
     const isCurrent = currentFolder === folder.path;
+    const isExcluded = excludedFolders?.includes?.(folder.path);
 
     if (!shouldRender) return null;
 
@@ -92,7 +93,8 @@ const FolderTreeItem = ({ folder, depth = 0, allFolders, filterMode, folderSortM
                         ? "bg-[var(--accent-primary)]/20 text-white border-l-2 border-[var(--accent-primary)]"
                         : isCurrent
                             ? "bg-white/10 text-white"
-                            : "hover:bg-white/5 text-[var(--text-secondary)] hover:text-white"
+                            : "hover:bg-white/5 text-[var(--text-secondary)] hover:text-white",
+                    isExcluded && "opacity-40 grayscale"
                 )}
                 style={{ paddingLeft: `${depth * 12 + 8}px` }}
                 onClick={handleClick}
@@ -115,14 +117,25 @@ const FolderTreeItem = ({ folder, depth = 0, allFolders, filterMode, folderSortM
                 <span className="truncate flex-1 text-sm font-medium">{folder.name}</span>
 
                 {/* File Count - Respects Type Filter if Possible, else shows total */}
-                <span className="text-[9px] font-mono text-gray-500 mr-1">
+                <span className="text-[9px] font-mono text-gray-500 mr-1 ml-auto group-hover:hidden transition-all">
                     {(filterMode.includes('video') && !filterMode.includes('all'))
                         ? (folder.videoCount || folder.fileCount) // Fallback if videoCount missing
                         : folder.fileCount
                     }
                 </span>
 
-                <div className="flex items-center gap-1 opacity-60">
+                <button
+                    onClick={(e) => { e.stopPropagation(); toggleFolderExclusion(folder.path); }}
+                    className={clsx(
+                        "hidden group-hover:flex ml-auto p-0.5 rounded transition-all items-center justify-center shrink-0",
+                        isExcluded ? "text-amber-400 hover:bg-amber-400/20" : "text-white/30 hover:text-white hover:bg-white/10"
+                    )}
+                    title={isExcluded ? "Unhide Folder" : "Hide/Exclude Folder"}
+                >
+                    {isExcluded ? <Eye size={12} /> : <EyeOff size={12} />}
+                </button>
+
+                <div className="flex items-center gap-1 opacity-60 shrink-0">
                     {folder.hasGifs && <span className="text-[8px] bg-purple-500/20 text-purple-200 px-1 rounded">GIF</span>}
                     {folder.hasVideos && <Film size={10} />}
                 </div>
@@ -154,16 +167,11 @@ const LeftSidebar = () => {
         fileTypeFilter, setFileTypeFilter,
         explorerSearchQuery, setExplorerSearchQuery,
         isScanning, scannedCount, startScan,
-        theme, setTheme, themeMode, toggleThemeMode
+        theme, setTheme, themeMode, toggleThemeMode,
+        excludedFolders, excludedItems, clearExclusions
     } = useMediaStore();
 
-    const themes = [
-        { id: 'winter', name: 'Winter', color: 'bg-blue-400' },
-        { id: 'spring', name: 'Spring', color: 'bg-pink-400' },
-        { id: 'summer', name: 'Summer', color: 'bg-teal-400' },
-        { id: 'autumn', name: 'Autumn', color: 'bg-orange-500' },
-        { id: 'harmattan', name: 'Harmattan', color: 'bg-yellow-600' }
-    ];
+
 
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
     const [pendingHandle, setPendingHandle] = useState(null);
@@ -172,6 +180,11 @@ const LeftSidebar = () => {
 
     useEffect(() => {
         const checkRestore = async () => {
+            // Abort if already loaded
+            if (folders.length > 0 || folderHandle) {
+                return;
+            }
+
             try {
                 // Load Last Handle
                 const handle = await getSavedFolderHandle();
@@ -188,7 +201,29 @@ const LeftSidebar = () => {
             }
         };
         checkRestore();
-    }, []);
+    }, []); // Run once on mount, but checks state refs if possible... wait, empty dependency array means it uses initial state.
+    // However, if the app loads, folders might be empty initially. 
+    // BUT if the app *reloads* (F5), state is reset, so folders IS empty.
+    // The user's issue is likely when they interact or navigation happens?
+    // "It currently shows up even when the Library is already loaded up"
+    // This implies that perhaps the component re-mounts?
+    // OR, maybe they mean they opened a folder manually, and THEN this popped up?
+    // If it runs ONCE on mount, verify persistence.
+
+    // If I add [folders, folderHandle] to dependency, it will keep running? No.
+    // Let's stick to the check. If state is hydrated via persist middleware, it *should* be available.
+    // Actually, zustand persist hydration happens async or sync?
+    // If it is sync from localStorage, it might be fine.
+
+    // Better approach: Check if we JUST opened a folder?
+    // If the user says "Library is already loaded up", it means they might have opened one.
+    // If this component mounts `useEffect([], ...)` it runs only once.
+    // So if the library is loaded, why would this run again? 
+    // Maybe `LeftSidebar` is re-mounting? 
+    // Or maybe the user *started* the app, and the previous session restore popped up, 
+    // but they ignored it and opened a file?
+
+    // Let's add the check. It is safe.
 
     const handleRestoreConfirm = async () => {
         if (!pendingHandle) return;
@@ -239,9 +274,16 @@ const LeftSidebar = () => {
 
     const rootFolders = useMemo(() => {
         if (sortedFolders.length === 0) return [];
+
+        // SEARCH FILTER
+        if (explorerSearchQuery.trim()) {
+            const query = explorerSearchQuery.toLowerCase();
+            return sortedFolders.filter(f => f.name.toLowerCase().includes(query));
+        }
+
         const minSlashes = Math.min(...sortedFolders.map(f => f.path.split('/').length));
         return sortedFolders.filter(f => f.path.split('/').length === minSlashes);
-    }, [sortedFolders]);
+    }, [sortedFolders, explorerSearchQuery]);
 
     const handleSmartRescan = useCallback(() => {
         if (folderHandle && startScan) {
@@ -301,18 +343,7 @@ const LeftSidebar = () => {
 
             {/* Explorer Controls */}
             <div className="p-3 space-y-3 bg-white/5 border-b border-white/5">
-                <div className="flex items-center justify-between gap-2 p-2 bg-black/20 rounded-lg mx-2 mb-2">
-                    <div className="flex items-center gap-1.5">
-                        {themes.map(t => (
-                            <button
-                                key={t.id}
-                                onClick={() => setTheme(t.id)}
-                                className={clsx("w-3 h-3 rounded-full transition-transform hover:scale-125 hover:ring-2 hover:ring-white/40", t.color, theme === t.id && "ring-2 ring-white scale-125")}
-                                title={t.name}
-                            />
-                        ))}
-                    </div>
-                </div>
+
 
                 <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 mx-0.5">
                     {[
@@ -380,9 +411,6 @@ const LeftSidebar = () => {
                     </div>
                 </div>
 
-                {/* Depth Toggle */}
-
-
                 {isScanning && (
                     <div className="text-[9px] text-[var(--text-dim)] flex items-center justify-between px-1 animate-fade-in pt-1">
                         <div className="flex items-center gap-1.5 animate-pulse">
@@ -390,6 +418,22 @@ const LeftSidebar = () => {
                             <span className="font-bold tracking-wider uppercase">Scanning...</span>
                         </div>
                         <span className="font-mono bg-white/5 px-2 py-0.5 rounded-full">{scannedCount} FILES</span>
+                    </div>
+                )}
+
+                {/* Clear Exclusions Bubble */}
+                {(excludedFolders?.length > 0 || excludedItems?.length > 0) && (
+                    <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 rounded-lg p-1.5 px-2 mx-0.5 mt-1 animate-fade-in">
+                        <span className="text-[9px] text-amber-500/80 font-bold flex items-center gap-1">
+                            <EyeOff size={10} />
+                            {(excludedFolders?.length || 0) + (excludedItems?.length || 0)} Hidden
+                        </span>
+                        <button
+                            onClick={clearExclusions}
+                            className="text-[9px] bg-amber-500 hover:bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold transition-colors"
+                        >
+                            CLEAR
+                        </button>
                     </div>
                 )}
             </div>
@@ -402,6 +446,28 @@ const LeftSidebar = () => {
                             EXPLORER
                         </span>
                         {isScanning && <span className="text-[10px] text-[var(--accent-primary)] animate-pulse">SCANNING...</span>}
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="px-4 pb-2">
+                        <div className="relative group">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-dim)] group-focus-within:text-[var(--accent-primary)] transition-colors" size={12} />
+                            <input
+                                type="text"
+                                value={explorerSearchQuery}
+                                onChange={(e) => setExplorerSearchQuery(e.target.value)}
+                                placeholder="Search folders..."
+                                className="w-full bg-black/20 border border-white/5 rounded-lg py-1 pl-7 pr-6 text-[10px] text-white placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent-primary)]/50 transition-all font-medium"
+                            />
+                            {explorerSearchQuery && (
+                                <button
+                                    onClick={() => setExplorerSearchQuery('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-dim)] hover:text-white"
+                                >
+                                    <XOctagon size={10} />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex-1 min-h-0 bg-black/10">
@@ -492,6 +558,23 @@ const LeftSidebar = () => {
                             title={expandSignal.mode === 'all' ? "Collapse All Folders" : "Expand All Folders"}
                         >
                             {expandSignal.mode === 'all' ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                        </button>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const handle = await window.showDirectoryPicker();
+                                    if (handle) {
+                                        startScan(handle, true); // Append mode enabling multi-folder
+                                    }
+                                } catch (e) {
+                                    console.warn("Folder picker cancelled", e);
+                                }
+                            }}
+                            className="p-1 rounded-lg text-[var(--text-dim)] hover:text-white hover:bg-white/10 transition-colors active-press"
+                            title="Add Folder to Library (Multi-Folder Selection)"
+                            disabled={isScanning}
+                        >
+                            <Plus size={10} />
                         </button>
                         <button
                             onClick={handleSmartRescan}

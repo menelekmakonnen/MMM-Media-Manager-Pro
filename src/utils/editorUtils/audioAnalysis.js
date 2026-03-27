@@ -1,0 +1,57 @@
+const LOW_PASS_FREQUENCY = 150;
+const analyzeAudio = async (audioBuffer) => {
+  const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+  const source = offlineContext.createBufferSource();
+  source.buffer = audioBuffer;
+  const filter = offlineContext.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = LOW_PASS_FREQUENCY;
+  source.connect(filter);
+  filter.connect(offlineContext.destination);
+  source.start(0);
+  const renderedBuffer = await offlineContext.startRendering();
+  const data = renderedBuffer.getChannelData(0);
+  const peaks = [];
+  const threshold = 0.3;
+  const minDistance = 0.25;
+  const windowSize = Math.floor(0.05 * audioBuffer.sampleRate);
+  for (let i = 0; i < data.length - windowSize; i += windowSize) {
+    let sum = 0;
+    for (let j = 0; j < windowSize; j++) {
+      sum += Math.abs(data[i + j]);
+    }
+    const energy = sum / windowSize;
+    if (energy > threshold) {
+      const time = i / audioBuffer.sampleRate;
+      if (peaks.length === 0 || time - peaks[peaks.length - 1].time > minDistance) {
+        peaks.push({ time, energy });
+      }
+    }
+  }
+  const intervals = [];
+  for (let i = 1; i < peaks.length; i++) {
+    intervals.push(peaks[i].time - peaks[i - 1].time);
+  }
+  const histogram = {};
+  intervals.forEach((interval) => {
+    const rounded = Math.round(interval * 10) / 10;
+    histogram[rounded] = (histogram[rounded] || 0) + 1;
+  });
+  let maxCount = 0;
+  let bestInterval = 0.5;
+  Object.entries(histogram).forEach(([interval, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      bestInterval = parseFloat(interval);
+    }
+  });
+  const bpm = 60 / bestInterval;
+  return {
+    bpm: Math.round(bpm),
+    peaks,
+    offset: peaks[0]?.time || 0
+  };
+};
+export {
+  analyzeAudio
+};

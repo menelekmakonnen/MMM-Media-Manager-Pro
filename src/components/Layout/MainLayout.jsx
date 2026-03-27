@@ -10,6 +10,10 @@ import TopBar from './TopBar';
 import useMediaStore from '../../stores/useMediaStore';
 import GalleryView from './Views/GalleryView';
 import SlideshowView from './Views/SlideshowView';
+import EditorView from './Views/EditorView';
+import SettingsView from './Views/SettingsView';
+import { updateAppIcons } from '../../utils/LogoGenerator';
+import { useKeyboardBindings } from '../../hooks/useKeyboardBindings';
 
 const ResizeHandleVertical = () => (
     <PanelResizeHandle className="w-1 hover:w-1.5 bg-transparent hover:bg-[var(--accent-glow)] transition-all duration-300 flex flex-col justify-center items-center outline-none z-50 group">
@@ -27,6 +31,7 @@ const MainContentPanel = () => {
     const { appViewMode, globalViewMode } = useMediaStore();
 
     if (appViewMode === 'gallery') return <GalleryView />;
+    if (appViewMode === 'settings') return <SettingsView />;
 
     if (globalViewMode === 'fullGrid') return <FullGridView />;
     if (globalViewMode === 'folderGrid') return <FolderExplorer />;
@@ -41,41 +46,26 @@ const MainLayout = () => {
         appViewMode,
         fullscreenMode, toggleFullscreen,
         movieMode, toggleMovieMode,
+        cinemaMode, // New
         theme, themeMode,
         setAppViewMode,
-        slideshowIdle
+        slideshowIdle,
+        mediaContextMenu, setMediaContextMenu
     } = useMediaStore();
 
     React.useEffect(() => {
         document.body.setAttribute('data-theme', theme);
         document.body.setAttribute('data-mode', themeMode);
+        
+        // Update the dynamic SVG application icon and taskbar icon using the new computed accent color
+        setTimeout(() => {
+            const accentColor = getComputedStyle(document.body).getPropertyValue('--accent-primary').trim() || '#3b82f6';
+            updateAppIcons(accentColor);
+        }, 50);
     }, [theme, themeMode]);
 
-    React.useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (['ArrowRight', 'ArrowLeft', 'Home', 'End', ' ', 'Escape', 'f', 'F', 'm', 'M'].includes(e.key)) {
-                // e.preventDefault(); 
-            }
-            if (e.key === 'ArrowRight') nextFile();
-            if (e.key === 'ArrowLeft') prevFile();
-            if (e.key === 'Home') firstFile();
-            if (e.key === 'End') lastFile();
-            if (e.key === ' ') toggleSlideshow();
-            if (e.key === 'Escape') {
-                if (appViewMode === 'slideshow') {
-                    setAppViewMode('standard');
-                    return;
-                }
-                if (fullscreenMode) toggleFullscreen();
-                if (movieMode) toggleMovieMode();
-            }
-            if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey) toggleFullscreen();
-            if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey) toggleMovieMode();
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [nextFile, prevFile, firstFile, lastFile, toggleSlideshow, slideshowActive, fullscreenMode, toggleFullscreen, movieMode, toggleMovieMode, appViewMode, setAppViewMode]);
+    // === KEYBOARD BINDINGS ===
+    useKeyboardBindings();
 
     // Sync Fullscreen with Electron (Side Effect)
     React.useEffect(() => {
@@ -110,7 +100,7 @@ const MainLayout = () => {
     }
 
     return (
-        <div className="h-full w-full flex flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)] font-sans relative">
+        <div className="h-full w-full flex flex-col overflow-hidden bg-transparent text-[var(--text-primary)] font-sans relative">
             {/* 1. Top Bar (Hidable in Movie Mode) */}
             {!movieMode && <TopBar />}
 
@@ -122,7 +112,7 @@ const MainLayout = () => {
                     <Panel minSize={movieMode ? 100 : 50}>
                         <PanelGroup direction="horizontal">
                             {/* Left Sidebar */}
-                            {!movieMode && appViewMode !== 'gallery' && (
+                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && (
                                 <>
                                     <Panel defaultSize={18} minSize={15} maxSize={25} collapsible={true} className="z-10">
                                         <LeftSidebar />
@@ -132,12 +122,16 @@ const MainLayout = () => {
                             )}
 
                             {/* Center + Right */}
-                            <Panel minSize={50}>
-                                <MainContentPanel />
+                            <Panel minSize={50} className="relative z-0 bg-[#050510]">
+                                {appViewMode === 'editor' ? (
+                                    <EditorView />
+                                ) : (
+                                    <MainContentPanel />
+                                )}
                             </Panel>
 
                             {/* Right Sidebar (Optional) */}
-                            {!movieMode && appViewMode !== 'gallery' && (
+                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && (
                                 <>
                                     <ResizeHandleVertical />
                                     <Panel defaultSize={12} minSize={8} maxSize={18} collapsible={true} className="z-10">
@@ -170,6 +164,44 @@ const MainLayout = () => {
                     </div>
                 )}
             </div>
+
+            {/* Global Context Menu */}
+            {mediaContextMenu && (
+                <div 
+                    className="fixed inset-0 z-[9999]" 
+                    onContextMenu={(e) => { e.preventDefault(); setMediaContextMenu(null); }}
+                    onClick={() => setMediaContextMenu(null)}
+                >
+                    <div 
+                        className="absolute bg-[#11111a] border border-white/10 shadow-2xl rounded-lg py-1 flex flex-col min-w-[200px] overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+                        style={{ 
+                            left: Math.min(mediaContextMenu.x, window.innerWidth - 250), 
+                            top: Math.min(mediaContextMenu.y, window.innerHeight - 100) 
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button 
+                            className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider hover:bg-[var(--accent-primary)] hover:text-white transition-colors text-white/80"
+                            onClick={() => {
+                                useMediaStore.getState().sendToEditor(mediaContextMenu.file, 0, true);
+                                setMediaContextMenu(null);
+                            }}
+                        >
+                            Add to Edit (Entire Clip)
+                        </button>
+                        <button 
+                            className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider hover:bg-[var(--accent-primary)] hover:text-white transition-colors text-white/80"
+                            onClick={() => {
+                                const frame = Math.floor(mediaContextMenu.currentTime * 30);
+                                useMediaStore.getState().sendToEditor(mediaContextMenu.file, frame, false);
+                                setMediaContextMenu(null);
+                            }}
+                        >
+                            Add to Edit (From current playback)
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

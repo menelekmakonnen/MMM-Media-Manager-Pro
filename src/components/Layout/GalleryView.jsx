@@ -14,7 +14,7 @@ const GalleryView = () => {
         fileTypeFilter, setFileTypeFilter, setGridLayout,
         folders: allFolders, galleryViewMode, setGalleryViewMode,
         setCurrentFileIndex, files: allFiles,
-        galleryOrientation, setGalleryOrientation
+        galleryOrientation, setGalleryOrientation, showJumpButtons
     } = useMediaStore();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -431,28 +431,30 @@ const GalleryView = () => {
             </div>
 
             {/* Floating Jump Buttons */}
-            <div className="fixed bottom-8 right-8 flex flex-col gap-2 z-50">
-                <button
-                    onClick={() => {
-                        const grid = document.querySelector('.overflow-y-auto');
-                        if (grid) grid.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
-                    title="Jump to Top"
-                >
-                    <ArrowUp size={24} className="group-hover:-translate-y-1 transition-transform" />
-                </button>
-                <button
-                    onClick={() => {
-                        const grid = document.querySelector('.overflow-y-auto');
-                        if (grid) grid.scrollTo({ top: grid.scrollHeight, behavior: 'smooth' });
-                    }}
-                    className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
-                    title="Jump to Bottom"
-                >
-                    <ArrowDown size={24} className="group-hover:translate-y-1 transition-transform" />
-                </button>
-            </div>
+            {showJumpButtons && (
+                <div className="fixed bottom-8 right-8 flex flex-col gap-2 z-50">
+                    <button
+                        onClick={() => {
+                            const grid = document.querySelector('.overflow-y-auto');
+                            if (grid) grid.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
+                        title="Jump to Top"
+                    >
+                        <ArrowUp size={24} className="group-hover:-translate-y-1 transition-transform" />
+                    </button>
+                    <button
+                        onClick={() => {
+                            const grid = document.querySelector('.overflow-y-auto');
+                            if (grid) grid.scrollTo({ top: grid.scrollHeight, behavior: 'smooth' });
+                        }}
+                        className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
+                        title="Jump to Bottom"
+                    >
+                        <ArrowDown size={24} className="group-hover:translate-y-1 transition-transform" />
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

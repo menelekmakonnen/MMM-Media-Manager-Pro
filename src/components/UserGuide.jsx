@@ -36,7 +36,7 @@ const UserGuide = ({ isOpen, onClose }) => {
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-white/10">
                     <GuideSection title="Getting Started" icon={Monitor}>
-                        <p>Welcome to <strong>MMM Media Manager</strong>, your luxury media experience.</p>
+                        <p>Welcome to <strong>Mmmedia Darkroom</strong>, your luxury media experience.</p>
                         <p>To begin, use <strong>File &gt; Open Folder</strong> (Ctrl+O) to select a directory containing your media.</p>
                         <p>Use the <strong>Sidebar</strong> to navigate folders. You can toggle between "Tree" and "Grid" view using the buttons in the sidebar header.</p>
                     </GuideSection>
@@ -70,7 +70,7 @@ const UserGuide = ({ isOpen, onClose }) => {
 
                 {/* Footer */}
                 <div className="p-4 border-t border-[var(--glass-border)] bg-[var(--bg-primary)] text-center text-[var(--text-dim)] text-xs">
-                    MMM Media Manager v1.0 • Designed for Luxury
+                    Mmmedia Darkroom v2.0 • Designed for Luxury
                 </div>
             </div>
         </div>

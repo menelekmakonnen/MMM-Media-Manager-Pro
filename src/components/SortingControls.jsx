@@ -23,6 +23,7 @@ const SortingControls = ({ compact = false }) => {
         { value: 'size', label: 'Size', icon: HardDrive },
         { value: 'type', label: 'Type', icon: ImageIcon },
         { value: 'nameLength', label: 'Length', icon: FileText },
+        { value: 'random', label: 'Random', icon: Shuffle },
     ];
 
     const mediaTypes = [

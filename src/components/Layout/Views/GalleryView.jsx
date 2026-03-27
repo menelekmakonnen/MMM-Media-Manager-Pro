@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import VideoThumbnail from '../../VideoThumbnail';
 import { getThumbnailUrl } from '../../../utils/thumbnailCache';
-import { Search, Filter, SortAsc, SortDesc, ZoomIn, ZoomOut, Image as ImageIcon, Film, Layers, Grid2X2, LayoutPanelLeft, PlayCircle, Minimize2, ArrowLeftRight, ArrowUp, ArrowDown, Folder } from 'lucide-react';
+import { Search, Filter, SortAsc, SortDesc, ZoomIn, ZoomOut, Image as ImageIcon, Film, Layers, Grid2X2, LayoutPanelLeft, PlayCircle, Minimize2, ArrowLeftRight, ArrowUp, ArrowDown, Folder, EyeOff } from 'lucide-react';
 
 const GalleryView = () => {
     const {
@@ -14,7 +14,7 @@ const GalleryView = () => {
         fileTypeFilter, setFileTypeFilter, setGridLayout,
         folders: allFolders, galleryViewMode, setGalleryViewMode,
         setCurrentFileIndex, files: allFiles,
-        galleryOrientation, setGalleryOrientation
+        galleryOrientation, setGalleryOrientation, isScanning, showJumpButtons
     } = useMediaStore();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -23,6 +23,19 @@ const GalleryView = () => {
     // Infinite Scroll State
     const [visibleCount, setVisibleCount] = useState(40);
     const observerTarget = useRef(null);
+
+    // Selection State
+    const [selectedPaths, setSelectedPaths] = useState(new Set());
+    const [lastSelectedPath, setLastSelectedPath] = useState(null);
+    const [isPaintingSelection, setIsPaintingSelection] = useState(false);
+
+    useEffect(() => {
+        const stopPaint = () => setIsPaintingSelection(false);
+        window.addEventListener('mouseup', stopPaint);
+        return () => window.removeEventListener('mouseup', stopPaint);
+    }, []);
+
+
 
     const fullFiles = getGalleryFiles();
 
@@ -70,24 +83,66 @@ const GalleryView = () => {
             items = items.filter(f => f.name.toLowerCase().includes(q));
         }
 
-        // 4. Sorting
+        // 4. Sorting (Deferred during massive scans to prevent 50+ UI lockups)
         const { sortBy, sortOrder } = galleryFilter;
-        files.sort((a, b) => {
-            let valA, valB;
-            if (sortBy === 'date') { valA = a.lastModified || 0; valB = b.lastModified || 0; }
-            else if (sortBy === 'size') { valA = a.size || 0; valB = b.size || 0; }
-            else { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); }
-            if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-            if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-            return 0;
-        });
+        if (!isScanning) {
+            files.sort((a, b) => {
+                let valA, valB;
+                if (sortBy === 'date') { valA = a.lastModified || 0; valB = b.lastModified || 0; }
+                else if (sortBy === 'size') { valA = a.size || 0; valB = b.size || 0; }
+                else { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); }
+                if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+                if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
 
         return [...items, ...files];
-    }, [fullFiles, searchQuery, galleryFilter, fileTypeFilter, galleryViewMode, currentFolder, allFolders]);
+    }, [fullFiles, searchQuery, galleryFilter, fileTypeFilter, galleryViewMode, currentFolder, allFolders, isScanning]);
 
     const visibleItems = useMemo(() => {
         return filteredItems.slice(0, visibleCount);
     }, [filteredItems, visibleCount]);
+
+    const handleSelect = useCallback((e, item) => {
+        e.stopPropagation();
+        setSelectedPaths(prev => {
+            const next = new Set(prev);
+            if (e.ctrlKey || e.metaKey) {
+                if (next.has(item.path)) next.delete(item.path);
+                else next.add(item.path);
+            } else if (e.shiftKey && lastSelectedPath) {
+                const mediaItems = visibleItems.filter(f => !f.isFolder);
+                const startIdx = mediaItems.findIndex(f => f.path === lastSelectedPath);
+                const endIdx = mediaItems.findIndex(f => f.path === item.path);
+                if (startIdx !== -1 && endIdx !== -1) {
+                    const [min, max] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
+                    for (let i = min; i <= max; i++) {
+                        next.add(mediaItems[i].path);
+                    }
+                } else {
+                    next.add(item.path);
+                }
+            } else {
+                next.clear();
+                next.add(item.path);
+            }
+            return next;
+        });
+        setLastSelectedPath(item.path);
+    }, [visibleItems, lastSelectedPath]);
+
+    const handleItemMouseDown = useCallback((e, item) => {
+        if (e.button !== 0) return;
+        setIsPaintingSelection(true);
+        handleSelect(e, item);
+    }, [handleSelect]);
+
+    const handleItemMouseEnter = useCallback((item) => {
+        if (isPaintingSelection) {
+            setSelectedPaths(prev => new Set(prev).add(item.path));
+        }
+    }, [isPaintingSelection]);
 
     // Reset visible count when filtered results change
     // Removed direct setVisibleCount to avoid cascading renders
@@ -369,9 +424,17 @@ const GalleryView = () => {
                     if (e.target.scrollTop === 0 && visibleCount !== 40) setVisibleCount(40);
                 }}
             >
+                {/* Click outside to clear selection */}
+                <div 
+                    className="absolute inset-0 z-0" 
+                    onClick={() => setSelectedPaths(new Set())}
+                    onMouseDown={(e) => {
+                        if (e.button === 0) setSelectedPaths(new Set());
+                    }}
+                />
                 <div
                     className={clsx(
-                        "grid gap-4",
+                        "grid gap-4 relative z-10",
                         galleryOrientation === 'square' ? "grid-cols-[repeat(auto-fill,minmax(var(--zoom-size),1fr))]" : ""
                     )}
                     style={{
@@ -386,23 +449,31 @@ const GalleryView = () => {
                         item.isFolder ? (
                             <GalleryFolderItem key={item.path} folder={item} onOpen={() => setCurrentFolder(item.path)} allFiles={allFiles} />
                         ) : (
-                            <GalleryItem key={item.path + i} file={item} galleryOrientation={galleryOrientation} onOpenStandard={() => {
-                                // SYNC Standard View state with Gallery state
-                                const { sortBy, sortOrder } = galleryFilter;
-                                const store = useMediaStore.getState();
+                            <GalleryItem 
+                                key={item.path + i} 
+                                file={item} 
+                                galleryOrientation={galleryOrientation} 
+                                isSelected={selectedPaths.has(item.path)}
+                                onMouseDown={(e) => handleItemMouseDown(e, item)}
+                                onMouseEnter={() => handleItemMouseEnter(item)}
+                                onOpenStandard={() => {
+                                    // SYNC Standard View state with Gallery state
+                                    const { sortBy, sortOrder } = galleryFilter;
+                                    const store = useMediaStore.getState();
 
-                                store.setSortStack([{ field: sortBy, order: sortOrder }]);
-                                store.setExplorerSearchQuery(searchQuery);
-                                store.updateProcessedFiles(true); // Force immediate update
+                                    store.setSortStack([{ field: sortBy, order: sortOrder }]);
+                                    store.setExplorerSearchQuery(searchQuery);
+                                    store.updateProcessedFiles(true); // Force immediate update
 
-                                // Now find the index in the synchronized list
-                                const updatedFiles = store.processedFiles;
-                                const index = updatedFiles.findIndex(f => f.path === item.path);
+                                    // Now find the index in the synchronized list
+                                    const updatedFiles = store.processedFiles;
+                                    const index = updatedFiles.findIndex(f => f.path === item.path);
 
-                                setGridLayout(1, 1);
-                                setAppViewMode('standard');
-                                if (index !== -1) setCurrentFileIndex(index);
-                            }} />
+                                    setGridLayout(1, 1);
+                                    setAppViewMode('standard');
+                                    if (index !== -1) setCurrentFileIndex(index);
+                                }} 
+                            />
                         )
                     ))}
 
@@ -422,37 +493,75 @@ const GalleryView = () => {
                 )}
             </div>
 
+            {/* Selection ActionBar */}
+            <AnimatePresence>
+                {selectedPaths.size > 0 && (
+                    <motion.div
+                        initial={{ y: 100, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 100, opacity: 0 }}
+                        className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[var(--accent-primary)] text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 z-50 pointer-events-auto"
+                    >
+                        <span className="font-bold">{selectedPaths.size} selected</span>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => {
+                                    const selectedFiles = filteredItems.filter(f => selectedPaths.has(f.path) && f.type === 'video');
+                                    let currentFrame = 0;
+                                    selectedFiles.forEach(file => {
+                                        useMediaStore.getState().sendToEditor(file, currentFrame, true);
+                                    });
+                                    setSelectedPaths(new Set());
+                                }}
+                                className="bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm"
+                            >
+                                Add to Editor
+                            </button>
+                            <button 
+                                onClick={() => setSelectedPaths(new Set())}
+                                className="bg-black/20 hover:bg-black/30 px-3 py-1.5 rounded-lg text-sm transition-colors"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Floating Jump Buttons */}
-            <div className="fixed bottom-8 right-8 flex flex-col gap-2 z-50">
-                <button
-                    onClick={() => {
-                        const grid = document.querySelector('.overflow-y-auto');
-                        if (grid) grid.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
-                    title="Jump to Top"
-                >
-                    <ArrowUp size={24} className="group-hover:-translate-y-1 transition-transform" />
-                </button>
-                <button
-                    onClick={() => {
-                        const grid = document.querySelector('.overflow-y-auto');
-                        if (grid) grid.scrollTo({ top: grid.scrollHeight, behavior: 'smooth' });
-                    }}
-                    className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
-                    title="Jump to Bottom"
-                >
-                    <ArrowDown size={24} className="group-hover:translate-y-1 transition-transform" />
-                </button>
-            </div>
+            {showJumpButtons && (
+                <div className="fixed bottom-8 right-8 flex flex-col gap-2 z-50">
+                    <button
+                        onClick={() => {
+                            const grid = document.querySelector('.overflow-y-auto');
+                            if (grid) grid.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
+                        title="Jump to Top"
+                    >
+                        <ArrowUp size={24} className="group-hover:-translate-y-1 transition-transform" />
+                    </button>
+                    <button
+                        onClick={() => {
+                            const grid = document.querySelector('.overflow-y-auto');
+                            if (grid) grid.scrollTo({ top: grid.scrollHeight, behavior: 'smooth' });
+                        }}
+                        className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-white/60 hover:text-white transition-all shadow-2xl group"
+                        title="Jump to Bottom"
+                    >
+                        <ArrowDown size={24} className="group-hover:translate-y-1 transition-transform" />
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
 
-const GalleryItem = ({ file, onOpenStandard, galleryOrientation }) => {
+const GalleryItem = ({ file, onOpenStandard, galleryOrientation, isSelected, onMouseDown, onMouseEnter }) => {
     const [thumbUrl, setThumbUrl] = useState(null);
     const [isHovered, setIsHovered] = useState(false);
     const [previewTime, setPreviewTime] = useState(1);
+    const { mediaFitMode } = useMediaStore();
     const isVideo = file.type === 'video';
 
     useEffect(() => {
@@ -477,20 +586,36 @@ const GalleryItem = ({ file, onOpenStandard, galleryOrientation }) => {
     return (
         <motion.div
             layout
-            onMouseEnter={() => setIsHovered(true)}
+            onMouseEnter={(e) => {
+                 setIsHovered(true);
+                 if (onMouseEnter) onMouseEnter(e);
+            }}
             onMouseLeave={() => setIsHovered(false)}
+            onMouseDown={onMouseDown}
+            onDoubleClick={(e) => {
+                e.stopPropagation();
+                useMediaStore.getState().setGridLayout(1, 1);
+                useMediaStore.getState().setAppViewMode('standard');
+                onOpenStandard();
+            }}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={clsx(
-                "group relative bg-black/40 rounded-xl border border-white/5 overflow-hidden shadow-lg hover:shadow-2xl hover:border-[var(--accent-primary)]/30 transition-all cursor-pointer",
+                "group relative bg-black/40 rounded-xl border overflow-hidden shadow-lg transition-all cursor-pointer gallery-item",
+                isSelected ? "border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)] ring-offset-2 ring-offset-black" : "border-white/5 hover:shadow-2xl hover:border-[var(--accent-primary)]/30",
                 galleryOrientation === 'horizontal' ? "aspect-video" :
                     galleryOrientation === 'square' ? "aspect-square" : "aspect-[2/3]"
             )}
-            onClick={() => {
-                useMediaStore.getState().setGridLayout(1, 1);
-                useMediaStore.getState().setAppViewMode('standard');
-                onOpenStandard();
+            onClick={(e) => {
+                // Relying on onMouseDown for painting/selection. 
+                // But for a normal click (without drag), it should select or we map it from the container. 
+                // Wait, onMouseDown triggered selection logic already! So no onClick logic needed.
+                e.preventDefault();
+            }}
+            onContextMenu={(e) => {
+                e.preventDefault();
+                useMediaStore.getState().setMediaContextMenu({ x: e.clientX, y: e.clientY, file, currentTime: file.type === 'video' ? previewTime : 0 });
             }}
         >
             {isHovered && isVideo ? (
@@ -501,11 +626,12 @@ const GalleryItem = ({ file, onOpenStandard, galleryOrientation }) => {
                 <img
                     src={thumbUrl}
                     alt={file.name}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    className={clsx("w-full h-full transition-transform duration-700 group-hover:scale-110 select-none", mediaFitMode === 'cover' ? 'object-cover' : 'object-contain')}
                     loading="lazy"
+                    draggable={false}
                 />
             ) : (
-                <div className="w-full h-full flex items-center justify-center bg-white/5 animate-pulse">
+                <div className="w-full h-full flex items-center justify-center bg-white/5 animate-pulse select-none" draggable={false}>
                     {isVideo ? <Film className="text-white/10" size={32} /> : <ImageIcon className="text-white/10" size={32} />}
                 </div>
             )}
@@ -534,10 +660,20 @@ const GalleryItem = ({ file, onOpenStandard, galleryOrientation }) => {
                         useMediaStore.getState().setGridLayout(1, 1);
                         useMediaStore.getState().startSlideshowAt(file.path);
                     }}
-                    className="p-1.5 bg-black/60 backdrop-blur rounded-lg border border-white/20 text-white hover:bg-amber-500 hover:border-amber-400 transition-all shadow-xl"
+                    className="p-1.5 bg-black/60 backdrop-blur rounded-lg border border-white/20 text-white hover:bg-blue-500 hover:border-blue-400 transition-all shadow-xl"
                     title="Play Slideshow"
                 >
                     <PlayCircle size={16} />
+                </button>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        useMediaStore.getState().toggleItemExclusion(file.path);
+                    }}
+                    className="p-1.5 bg-black/60 backdrop-blur rounded-lg border border-white/20 text-white hover:bg-amber-500 hover:border-amber-400 transition-all shadow-xl mt-4"
+                    title="Exclude Item"
+                >
+                    <EyeOff size={16} />
                 </button>
             </div>
         </motion.div>
@@ -577,7 +713,7 @@ const VideoHoverPreview = ({ file, startTime }) => {
             ref={videoRef}
             src={url}
             muted
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-${useMediaStore().mediaFitMode}`}
         />
     );
 };
@@ -647,6 +783,20 @@ const GalleryFolderItem = ({ folder, onOpen, allFiles, galleryOrientation }) => 
                 <div className="text-[9px] text-white/40 font-bold uppercase tracking-widest">
                     {folder.fileCount} items
                 </div>
+            </div>
+
+            {/* Actions */}
+            <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-30">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        useMediaStore.getState().toggleFolderExclusion(folder.path);
+                    }}
+                    className="p-1.5 bg-black/60 backdrop-blur rounded-lg border border-white/20 text-white hover:bg-amber-500 hover:border-amber-400 transition-all shadow-xl"
+                    title="Exclude Folder"
+                >
+                    <EyeOff size={16} />
+                </button>
             </div>
         </motion.div>
     );

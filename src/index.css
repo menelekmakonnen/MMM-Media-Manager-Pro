@@ -20,6 +20,7 @@
     --glass-border: rgba(255, 255, 255, 0.1);
 
     --font-display: 'Inter', system-ui, sans-serif;
+    --bg-image: none;
   }
 
   /* --- MODES (Overriding base lightness) --- */
@@ -123,10 +124,38 @@
     --bg-secondary: #292524;
   }
 
+  /* OUTER SPACE: Deep Cosmos, Nebula Accents, Starry Background */
+  [data-theme='outer-space'] {
+    --accent-primary: #818cf8; /* indigo-400 */
+    --accent-secondary: #c084fc; /* purple-400 */
+    --accent-luxury: #38bdf8; /* light blue 400 */
+  }
+
+  [data-theme='outer-space'][data-mode='light'] {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #f1f5f9;
+  }
+
+  [data-theme='outer-space'][data-mode='dark'] {
+    --bg-primary: #020617; /* Very deep slate */
+    --bg-secondary: #0f172a;
+    --bg-image: 
+      radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.04), transparent 40%),
+      radial-gradient(circle at 85% 30%, rgba(192, 132, 252, 0.04), transparent 40%),
+      radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0,0,0,0)),
+      radial-gradient(1.5px 1.5px at 50px 160px, rgba(255,255,255,0.8), rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.7), rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 130px 80px, #ffffff, rgba(0,0,0,0)),
+      radial-gradient(2px 2px at 160px 120px, rgba(255,255,255,0.6), rgba(0,0,0,0));
+  }
 
 
   body {
-    background-color: var(--bg-primary);
+    background-color: transparent;
+    background-image: var(--bg-image);
+    background-size: 100% 100%, 100% 100%, 200px 200px, 200px 200px, 200px 200px, 200px 200px, 200px 200px, 200px 200px;
+    background-repeat: repeat;
     color: var(--text-primary);
     overflow: hidden;
     /* Prevent body scroll */
@@ -134,10 +163,19 @@
   }
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar for specific containers */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {

@@ -1,12 +1,8 @@
-/* global process */
-import { app, BrowserWindow, screen, ipcMain } from 'electron';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
+const { app, BrowserWindow, screen, ipcMain, nativeImage } = require('electron');
+const path = require('path');
+const fs = require('fs');
 
-// ESM compatibility
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// CJS compatible inherently
 
 // Performance Optimizations
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -48,7 +44,8 @@ function loadState() {
 }
 
 function createWindow() {
-    const savedState = loadState();
+    // const savedState = loadState(); // TEMPORARY: Ignore saved state to fix "stuck" fullscreen issues
+    const savedState = null;
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width: dw, height: dh } = primaryDisplay.workAreaSize;
 
@@ -58,45 +55,62 @@ function createWindow() {
         : path.join(__dirname, '../dist/icon.png');
 
     mainWindow = new BrowserWindow({
-        width: savedState?.width || Math.min(1280, dw),
-        height: savedState?.height || Math.min(800, dh),
-        x: savedState?.x,
-        y: savedState?.y,
+        width: 1280, // Default safe size
+        height: 800,
+        x: undefined, // Let OS decide
+        y: undefined,
         minWidth: 1000,
         minHeight: 700,
         show: false,
         backgroundColor: '#0a0a0a',
-        titleBarStyle: 'hidden', // Performance and aesthetics
+        // titleBarStyle: 'hidden', // This was causing ghost controls on Windows
+        // titleBarOverlay removed to handle controls manually via React
         autoHideMenuBar: true,
         icon: iconPath,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js'),
+            preload: path.join(__dirname, 'preload.cjs'),
             devTools: isDev
-        }
+        },
+        fullscreen: false, // FORCE Windowed mode on start
+        frame: false, // Frameless for custom controls
     });
 
-    if (savedState?.isMaximized) {
-        mainWindow.maximize();
-    }
+    // savedState logic removed for now to force reset
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
     });
 
+    require('./exportPipeline.cjs')(mainWindow);
+
     // Window control events
     ipcMain.on('window-minimize', () => mainWindow?.minimize());
-    ipcMain.on('window-maximize', () => {
-        if (mainWindow?.isMaximized()) {
-            mainWindow.unmaximize();
-        } else {
-            mainWindow?.maximize();
+
+    ipcMain.on('update-icon', (event, dataUrl) => {
+        if (mainWindow && dataUrl) {
+            const image = nativeImage.createFromDataURL(dataUrl);
+            mainWindow.setIcon(image);
         }
     });
+
+    ipcMain.on('window-maximize', () => {
+        if (!mainWindow) return;
+        if (mainWindow.isFullScreen()) {
+            mainWindow.setFullScreen(false);
+        } else if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        } else {
+            mainWindow.maximize();
+        }
+    });
+
     ipcMain.on('window-close', () => mainWindow?.close());
+
     ipcMain.on('window-fullscreen', () => {
         if (mainWindow) {
+            // True Kiosk Toggle
             mainWindow.setFullScreen(!mainWindow.isFullScreen());
         }
     });
