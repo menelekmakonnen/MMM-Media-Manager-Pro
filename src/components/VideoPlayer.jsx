@@ -10,7 +10,7 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
     const [isMuted, setIsMuted] = useState(false);
     const [localRate, setLocalRate] = useState(null); // Override master if set
     const { register, unregister } = useVideoRegistry();
-    const { mediaFitMode } = useMediaStore();
+    const { mediaFitMode, isChaosMode } = useMediaStore();
 
     const effectiveRate = localRate !== null ? localRate : (masterPlaybackRate || 1);
 
@@ -34,6 +34,21 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
             videoRef.current.volume = masterVolume;
         }
     }, [masterVolume]);
+
+    // Apply Chaos mode start time
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const handleLoadedMetadata = () => {
+            if (isChaosMode && video.duration) {
+                video.currentTime = Math.random() * video.duration;
+            }
+        };
+
+        video.addEventListener('loadedmetadata', handleLoadedMetadata);
+        return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    }, [isChaosMode, fileUrl]);
 
     // Apply Playback Rate
     useEffect(() => {

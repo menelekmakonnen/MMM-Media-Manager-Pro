@@ -3,7 +3,8 @@ import { TimelineTab } from '../../../features/Timeline/TimelineTab';
 import { SequenceViewTab } from '../../../features/SequenceView/SequenceViewTab';
 import { SettingsTab } from '../../../features/Settings/SettingsTab';
 import { ExportTab } from '../../../features/Export/ExportTab';
-import { ArrowLeft, LayoutDashboard, Film, Layers, FileJson } from 'lucide-react';
+import { EditsTab } from '../../../features/Edits/EditsTab';
+import { ArrowLeft, LayoutDashboard, Film, Layers, FileJson, Wand2 } from 'lucide-react';
 import useMediaStore from '../../../stores/useMediaStore';
 import { useViewStore } from '../../../stores/editorViewStore';
 import clsx from 'clsx';
@@ -20,6 +21,8 @@ const EditorView = () => {
                 return <TimelineTab />;
             case 'sequence':
                 return <SequenceViewTab />;
+            case 'edits':
+                return <EditsTab />;
             case 'export':
                 return <ExportTab />;
             default:
@@ -51,6 +54,7 @@ const EditorView = () => {
                     <NavItem id="dashboard" icon={LayoutDashboard} label="Project Settings" />
                     <NavItem id="timeline" icon={Film} label="Timeline Editor" />
                     <NavItem id="sequence" icon={Layers} label="Sequence View" />
+                    <NavItem id="edits" icon={Wand2} label="Saved Trailers" />
                     <div className="flex-grow" />
                     <NavItem id="export" icon={FileJson} label="Export Project" />
                 </div>

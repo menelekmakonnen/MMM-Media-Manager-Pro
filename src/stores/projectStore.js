@@ -31,9 +31,13 @@ const useProjectStore = create()(
         createdAt: (/* @__PURE__ */ new Date()).toISOString(),
         lastModified: (/* @__PURE__ */ new Date()).toISOString()
       },
+      savedEdits: [],
       updateSettings: (updates) => set((state) => ({
         settings: { ...state.settings, ...updates, lastModified: (/* @__PURE__ */ new Date()).toISOString() }
       })),
+      addEdit: (edit) => set((state) => ({ savedEdits: [...(state.savedEdits || []), edit] })),
+      removeEdit: (editId) => set((state) => ({ savedEdits: (state.savedEdits || []).filter(e => e.id !== editId) })),
+      loadEdits: (edits) => set({ savedEdits: edits }),
       setResolution: (preset) => set((state) => ({
         settings: {
           ...state.settings,
@@ -100,7 +104,8 @@ const useProjectStore = create()(
           lastModified: (/* @__PURE__ */ new Date()).toISOString(),
           sequenceViewSplitHeight: 50,
           sequenceLoop: false
-        }
+        },
+        savedEdits: []
       })
     }),
     {

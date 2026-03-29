@@ -249,7 +249,6 @@ const TopBar = () => {
                         <Trash2 size={16} />
                         <RefreshCw size={8} className="absolute -bottom-1 -right-1 group-hover:rotate-180 transition-transform duration-500" />
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Refresh Cache</span>
                 </button>
 
                 {/* Custom Window Controls */}

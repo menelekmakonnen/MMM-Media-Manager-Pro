@@ -14,7 +14,8 @@ const GalleryView = () => {
         fileTypeFilter, setFileTypeFilter, setGridLayout,
         folders: allFolders, galleryViewMode, setGalleryViewMode,
         setCurrentFileIndex, files: allFiles,
-        galleryOrientation, setGalleryOrientation, isScanning, showJumpButtons
+        galleryOrientation, setGalleryOrientation, isScanning, showJumpButtons,
+        explorerSelectedFiles, setExplorerSelectedFiles
     } = useMediaStore();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -25,7 +26,6 @@ const GalleryView = () => {
     const observerTarget = useRef(null);
 
     // Selection State
-    const [selectedPaths, setSelectedPaths] = useState(new Set());
     const [lastSelectedPath, setLastSelectedPath] = useState(null);
     const [isPaintingSelection, setIsPaintingSelection] = useState(false);
 
@@ -106,7 +106,7 @@ const GalleryView = () => {
 
     const handleSelect = useCallback((e, item) => {
         e.stopPropagation();
-        setSelectedPaths(prev => {
+        setExplorerSelectedFiles(prev => {
             const next = new Set(prev);
             if (e.ctrlKey || e.metaKey) {
                 if (next.has(item.path)) next.delete(item.path);
@@ -140,7 +140,7 @@ const GalleryView = () => {
 
     const handleItemMouseEnter = useCallback((item) => {
         if (isPaintingSelection) {
-            setSelectedPaths(prev => new Set(prev).add(item.path));
+            setExplorerSelectedFiles(prev => new Set(prev).add(item.path));
         }
     }, [isPaintingSelection]);
 
@@ -427,9 +427,9 @@ const GalleryView = () => {
                 {/* Click outside to clear selection */}
                 <div 
                     className="absolute inset-0 z-0" 
-                    onClick={() => setSelectedPaths(new Set())}
+                    onClick={() => setExplorerSelectedFiles(new Set())}
                     onMouseDown={(e) => {
-                        if (e.button === 0) setSelectedPaths(new Set());
+                        if (e.button === 0) setExplorerSelectedFiles(new Set());
                     }}
                 />
                 <div
@@ -453,7 +453,7 @@ const GalleryView = () => {
                                 key={item.path + i} 
                                 file={item} 
                                 galleryOrientation={galleryOrientation} 
-                                isSelected={selectedPaths.has(item.path)}
+                                isSelected={explorerSelectedFiles.has(item.path)}
                                 onMouseDown={(e) => handleItemMouseDown(e, item)}
                                 onMouseEnter={() => handleItemMouseEnter(item)}
                                 onOpenStandard={() => {
@@ -495,30 +495,30 @@ const GalleryView = () => {
 
             {/* Selection ActionBar */}
             <AnimatePresence>
-                {selectedPaths.size > 0 && (
+                {explorerSelectedFiles.size > 0 && (
                     <motion.div
                         initial={{ y: 100, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 100, opacity: 0 }}
                         className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[var(--accent-primary)] text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 z-50 pointer-events-auto"
                     >
-                        <span className="font-bold">{selectedPaths.size} selected</span>
+                        <span className="font-bold">{explorerSelectedFiles.size} selected</span>
                         <div className="flex gap-2">
                             <button 
                                 onClick={() => {
-                                    const selectedFiles = filteredItems.filter(f => selectedPaths.has(f.path) && f.type === 'video');
+                                    const selectedFiles = filteredItems.filter(f => explorerSelectedFiles.has(f.path) && f.type === 'video');
                                     let currentFrame = 0;
                                     selectedFiles.forEach(file => {
                                         useMediaStore.getState().sendToEditor(file, currentFrame, true);
                                     });
-                                    setSelectedPaths(new Set());
+                                    setExplorerSelectedFiles(new Set());
                                 }}
                                 className="bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm"
                             >
                                 Add to Editor
                             </button>
                             <button 
-                                onClick={() => setSelectedPaths(new Set())}
+                                onClick={() => setExplorerSelectedFiles(new Set())}
                                 className="bg-black/20 hover:bg-black/30 px-3 py-1.5 rounded-lg text-sm transition-colors"
                             >
                                 Clear

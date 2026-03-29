@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronRight, Square,
     Volume2, VolumeX, Shuffle, RefreshCw,
     LayoutGrid, Grid3X3, Columns3, Grid2X2, Columns, Grid, Table,
-    RotateCw, Gauge, Clock, ChevronUp, ChevronDown, Monitor
+    RotateCw, Gauge, Clock, ChevronUp, ChevronDown, Monitor, Flame
 } from 'lucide-react';
 
 const ControlPanel = ({
@@ -27,7 +27,8 @@ const ControlPanel = ({
         masterPlaybackRate, setMasterPlaybackRate,
         globalRotation, setGlobalRotation,
         cinemaMode, toggleCinemaMode,
-        mediaFitMode, toggleMediaFitMode
+        mediaFitMode, toggleMediaFitMode,
+        isChaosMode, toggleChaosMode
     } = useMediaStore();
 
     // Logarithmic Volume Helper
@@ -49,36 +50,29 @@ const ControlPanel = ({
         )}>
 
             {/* ROW 1: PRIMARY CONTROLS */}
-            <div className="w-full flex items-center justify-center relative">
+            <div className="w-full flex items-center justify-between">
 
                 {/* DURATION CONTROLS (Show only in Compact/Slideshow Mode) */}
-                {compact && (
-                    <div className="absolute left-2 flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 shadow-lg">
-                        <div className="flex flex-col items-center bg-black/40 rounded-lg border border-white/5 px-1 py-0.5">
-                            <button onClick={() => setSlideshowDuration(Math.min(60, (slideshowDuration || 5) + 5))} onDoubleClick={() => setSlideshowDuration(60)} className="text-gray-500 hover:text-white transition-colors h-3 flex items-center" title="Click: +5s | Double-click: 60s">
-                                <ChevronUp size={12} />
-                            </button>
-                            <span onClick={() => setIsAutoAdvance && setIsAutoAdvance(!isAutoAdvance)} className={clsx("text-xs font-bold font-mono py-0.5 cursor-pointer select-none transition-colors", isAutoAdvance ? "text-green-400" : "text-gray-500")} title="Click to toggle Auto-Advance">
-                                {slideshowDuration || 5}s
-                            </span>
-                            <button onClick={() => setSlideshowDuration(Math.max(5, (slideshowDuration || 5) - 5))} onDoubleClick={() => setSlideshowDuration(5)} className="text-gray-500 hover:text-white transition-colors h-3 flex items-center" title="Click: -5s | Double-click: 5s">
-                                <ChevronDown size={12} />
-                            </button>
+                <div className="flex-1 flex justify-start pl-2">
+                    {compact && (
+                        <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 shadow-lg">
+                            <div className="flex flex-col items-center bg-black/40 rounded-lg border border-white/5 px-1 py-0.5">
+                                <button onClick={() => setSlideshowDuration(Math.min(60, (slideshowDuration || 5) + 5))} onDoubleClick={() => setSlideshowDuration(60)} className="text-gray-500 hover:text-white transition-colors h-3 flex items-center" title="Click: +5s | Double-click: 60s">
+                                    <ChevronUp size={12} />
+                                </button>
+                                <span onClick={() => setIsAutoAdvance && setIsAutoAdvance(!isAutoAdvance)} className={clsx("text-xs font-bold font-mono py-0.5 cursor-pointer select-none transition-colors", isAutoAdvance ? "text-green-400" : "text-gray-500")} title="Click to toggle Auto-Advance">
+                                    {slideshowDuration || 5}s
+                                </span>
+                                <button onClick={() => setSlideshowDuration(Math.max(5, (slideshowDuration || 5) - 5))} onDoubleClick={() => setSlideshowDuration(5)} className="text-gray-500 hover:text-white transition-colors h-3 flex items-center" title="Click: -5s | Double-click: 5s">
+                                    <ChevronDown size={12} />
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                )}
-
-                {/* KIOSK TOGGLE (Slideshow Only) */}
-                {compact && (
-                    <div className="absolute right-2">
-                        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (window.electronAPI) window.electronAPI.toggleFullscreen(); }} className={clsx("p-2 rounded-lg transition-all shadow-lg", fullscreenMode ? "bg-red-500 text-white" : "bg-black/60 text-gray-400 hover:bg-white/10 hover:text-white")} title="Toggle Kiosk Mode">
-                            {fullscreenMode ? <Minimize size={18} /> : <Maximize size={18} />}
-                        </button>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* CENTER: PLAYBACK & TOOLS (Merged) */}
-                <div className={clsx("flex flex-col items-center bg-black/40 p-2 flex-shrink rounded-2xl shadow-2xl min-w-0 transition-all z-10", cinemaMode ? "gap-1 py-1" : "gap-3")}>
+                <div className={clsx("flex flex-col items-center bg-black/40 p-2 flex-shrink-0 rounded-2xl shadow-2xl transition-all z-10", cinemaMode ? "gap-1 py-1" : "gap-3")}>
 
                     {/* Transport Controls & Tools */}
                     <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-2 sm:gap-4 lg:gap-6">
@@ -92,6 +86,7 @@ const ControlPanel = ({
                         {/* Unified Core Actions Group */}
                         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                             <button onClick={onRandomizeAll} className={clsx("rounded-xl transition-all active:scale-95 border", cinemaMode ? "p-1.5 border-transparent" : "p-2 sm:p-2.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border-purple-500/20")} title="Random Start Point"><Shuffle size={cinemaMode ? 14 : 16} /></button>
+                            <button onClick={toggleChaosMode} className={clsx("rounded-xl transition-all active:scale-95 border", cinemaMode ? "p-1.5 border-transparent" : "p-2 sm:p-2.5", isChaosMode ? "bg-orange-500/20 hover:bg-orange-500/30 text-orange-500 border-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.3)]" : "bg-white/5 hover:bg-white/10 text-gray-400 border-white/5")} title={isChaosMode ? "Chaos Mode ON (Random Start Times)" : "Chaos Mode OFF"}><Flame size={cinemaMode ? 14 : 16} fill={isChaosMode ? "currentColor" : "none"} /></button>
                             
                             {!compact && (
                                 <>
@@ -137,6 +132,15 @@ const ControlPanel = ({
                             className="w-full h-1 accent-[var(--accent-primary)] bg-white/10 rounded-full cursor-pointer opacity-60 group-hover/vol:opacity-100 transition-opacity"
                         />
                     </div>
+                </div>
+
+                {/* KIOSK TOGGLE (Slideshow Only) */}
+                <div className="flex-1 flex justify-end pr-2">
+                    {compact && (
+                        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (window.electronAPI) window.electronAPI.toggleFullscreen(); }} className={clsx("p-2 rounded-lg transition-all shadow-lg", fullscreenMode ? "bg-red-500 text-white" : "bg-black/60 text-gray-400 hover:bg-white/10 hover:text-white")} title="Toggle Kiosk Mode">
+                            {fullscreenMode ? <Minimize size={18} /> : <Maximize size={18} />}
+                        </button>
+                    )}
                 </div>
             </div>
 

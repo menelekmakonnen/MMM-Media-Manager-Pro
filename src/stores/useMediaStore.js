@@ -35,6 +35,32 @@ const useMediaStore = create(persist((set, get) => ({
     scannedCount: 0,
     currentWorker: null,
 
+    // === TRAILER SETTINGS ===
+    trailerSettings: {
+        template: 'social', // 'social' | 'epic' | 'gym' | 'kinetic' | 'custom'
+        targetDuration: 30, // seconds
+        shortestClip: 0.2,
+        longestClip: 1.0,
+        allowDuplicates: true,
+        allowSameSegment: false,
+        mediaType: 'video', // 'video' | 'image'
+        audioMixStrategy: 'muted', // 'muted' | 'subtle' | 'original' | 'ducking'
+        slowmoPolicy: 'none', // 'none' | 'mixed' | 'all'
+        audioTimelineStrategy: 'loop', // 'loop' | 'fade' | 'continue'
+        matchAudioDuration: true
+    },
+    setTrailerSettings: (settings) => set(state => ({ trailerSettings: { ...state.trailerSettings, ...settings } })),
+    
+    isTrailerModalOpen: false,
+    setTrailerModalOpen: (val) => set({ isTrailerModalOpen: val }),
+
+    // === MULTI-SELECTION STATE ===
+    explorerSelectedFiles: new Set(),
+    setExplorerSelectedFiles: (updater) => set(state => ({ 
+        explorerSelectedFiles: typeof updater === 'function' ? updater(state.explorerSelectedFiles) : updater 
+    })),
+    clearExplorerSelection: () => set({ explorerSelectedFiles: new Set() }),
+
 
 
     // === SLIDESHOW STATE ===
@@ -61,6 +87,8 @@ const useMediaStore = create(persist((set, get) => ({
     // === ACTIONS: Playback ===
     setMasterVolume: (vol) => set({ masterVolume: vol }),
     setIsMasterMuted: (val) => set({ isMasterMuted: val }),
+    isChaosMode: false,
+    toggleChaosMode: () => set(state => ({ isChaosMode: !state.isChaosMode })),
 
     // === ACTIONS: Performance ===
     showMoreItems: () => set(state => ({ visibleLimit: state.visibleLimit + 1000 })),

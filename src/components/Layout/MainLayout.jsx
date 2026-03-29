@@ -14,6 +14,8 @@ import EditorView from './Views/EditorView';
 import SettingsView from './Views/SettingsView';
 import { updateAppIcons } from '../../utils/LogoGenerator';
 import { useKeyboardBindings } from '../../hooks/useKeyboardBindings';
+import TrailerModal from '../Trailer/TrailerModal';
+import { TrailerView } from '../Trailer/TrailerView';
 
 const ResizeHandleVertical = () => (
     <PanelResizeHandle className="w-1 hover:w-1.5 bg-transparent hover:bg-[var(--accent-glow)] transition-all duration-300 flex flex-col justify-center items-center outline-none z-50 group">
@@ -32,6 +34,7 @@ const MainContentPanel = () => {
 
     if (appViewMode === 'gallery') return <GalleryView />;
     if (appViewMode === 'settings') return <SettingsView />;
+    if (appViewMode === 'trailerView') return <TrailerView />;
 
     if (globalViewMode === 'fullGrid') return <FullGridView />;
     if (globalViewMode === 'folderGrid') return <FolderExplorer />;
@@ -50,7 +53,8 @@ const MainLayout = () => {
         theme, themeMode,
         setAppViewMode,
         slideshowIdle,
-        mediaContextMenu, setMediaContextMenu
+        mediaContextMenu, setMediaContextMenu,
+        isTrailerModalOpen
     } = useMediaStore();
 
     React.useEffect(() => {
@@ -112,7 +116,7 @@ const MainLayout = () => {
                     <Panel minSize={movieMode ? 100 : 50}>
                         <PanelGroup direction="horizontal">
                             {/* Left Sidebar */}
-                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && (
+                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && appViewMode !== 'trailerView' && (
                                 <>
                                     <Panel defaultSize={18} minSize={15} maxSize={25} collapsible={true} className="z-10">
                                         <LeftSidebar />
@@ -131,7 +135,7 @@ const MainLayout = () => {
                             </Panel>
 
                             {/* Right Sidebar (Optional) */}
-                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && (
+                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && appViewMode !== 'trailerView' && (
                                 <>
                                     <ResizeHandleVertical />
                                     <Panel defaultSize={12} minSize={8} maxSize={18} collapsible={true} className="z-10">
@@ -199,9 +203,28 @@ const MainLayout = () => {
                         >
                             Add to Edit (From current playback)
                         </button>
+                        <div className="h-px bg-white/10 my-1 mx-2" />
+                        <button 
+                            className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider hover:bg-purple-600 hover:text-white transition-colors text-purple-300 flex items-center justify-between"
+                            onClick={() => {
+                                const store = useMediaStore.getState();
+                                // Ensure this file is selected if no others are
+                                if (store.explorerSelectedFiles.size === 0) {
+                                    store.setExplorerSelectedFiles(new Set([mediaContextMenu.file.path]));
+                                }
+                                store.setTrailerModalOpen(true);
+                                setMediaContextMenu(null);
+                            }}
+                        >
+                            <span>Make a Trailer</span>
+                            <span>🪄</span>
+                        </button>
                     </div>
                 </div>
             )}
+
+            {/* Trailer Modal Overlay */}
+            {isTrailerModalOpen && <TrailerModal />}
         </div>
     );
 };

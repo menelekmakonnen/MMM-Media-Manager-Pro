@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import clsx from 'clsx';
-import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Film, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target } from 'lucide-react';
+import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Film, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target, Wand2 } from 'lucide-react';
 
 const formatBytes = (bytes, decimals = 2) => {
     if (!+bytes) return '0 B';
@@ -74,7 +74,8 @@ const RightSidebar = () => {
         showJumpButtons, toggleJumpButtons,
         // Grid Options
         gridColumns, gridRows, threeGridEqual,
-        toggleDual, toggleTriple, toggleQuad, toggleSix, toggleNine, toggleTwelve, setGridLayout
+        toggleDual, toggleTriple, toggleQuad, toggleSix, toggleNine, toggleTwelve, setGridLayout,
+        setTrailerModalOpen
     } = useMediaStore();
 
     return (
@@ -188,6 +189,18 @@ const RightSidebar = () => {
                             <button onClick={toggleTwelve} title="Twelve Grid" className={clsx("flex items-center gap-2 p-1.5 rounded text-[11px] transition-all overflow-hidden col-span-full justify-center", (gridColumns * gridRows === 12) ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10")}>
                                 <LayoutGrid size={14} className="shrink-0" />
                                 <span className="font-medium truncate text-[10px]">Twelve (12)</span>
+                            </button>
+                        </div>
+                    </FilterSection>
+
+                    {/* GENERATORS */}
+                    <FilterSection title="Generators" expanded={true}>
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => setTrailerModalOpen(true)}
+                                className="w-full flex items-center justify-between p-2 rounded text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600/30 to-blue-600/30 text-white hover:from-purple-500/50 hover:to-blue-500/50 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)] transition-all hover:scale-[1.02]"
+                            >
+                                <span className="flex items-center gap-2"><Wand2 size={14} className="text-purple-300" /> Make a Trailer</span>
                             </button>
                         </div>
                     </FilterSection>
