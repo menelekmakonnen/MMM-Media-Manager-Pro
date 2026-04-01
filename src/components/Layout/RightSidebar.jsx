@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import clsx from 'clsx';
-import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Film, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target, Wand2, Folder, Clock, Gauge, Activity, MonitorPlay, Ratio, CalendarDays, CalendarPlus, Type } from 'lucide-react';
+import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target, Wand2, Folder, Clock, Gauge, Activity, MonitorPlay, Ratio, CalendarDays, CalendarPlus, Type } from 'lucide-react';
 
 const formatBytes = (bytes, decimals = 2) => {
     if (!+bytes) return '0 B';
@@ -241,10 +241,7 @@ const RightSidebar = () => {
                             <SortToggle field="year" label="Year" icon={CalendarDays} />
                             <SortToggle field="type" label="Video / Item Type" icon={MonitorPlay} />
 
-                            <div className="h-px bg-white/5 my-1" />
 
-                            <SortToggle field="path" label="Default (Path)" icon={Film} />
-                            
                             <button
                                 onClick={() => shuffleFiles()}
                                 className={clsx(

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { extractAllMetadata, cancelExtraction, resetExtractionCache } from '../utils/metadataExtractor';
 
 const useMediaStore = create(persist((set, get) => ({
     // === FOLDER & FILES ===
@@ -150,6 +151,11 @@ const useMediaStore = create(persist((set, get) => ({
                 set({ isScanning: false, currentWorker: null });
                 worker.terminate();
                 updateProcessedFiles(); // Final update
+
+                // Kick off background metadata extraction after scan finishes
+                if (type === 'SCAN_COMPLETE') {
+                    setTimeout(() => extractAllMetadata(), 500);
+                }
             } else if (type === 'SCAN_ERROR') {
                 set({ isScanning: false, currentWorker: null });
                 worker.terminate();
@@ -463,7 +469,11 @@ const useMediaStore = create(persist((set, get) => ({
         get().updateProcessedFiles();
     },
     setFiles: (files) => set({ files }),
-    clearFiles: () => set({ files: [], folders: [], currentFileIndex: -1, currentFolder: null, activeFolders: [] }),
+    clearFiles: () => {
+        cancelExtraction();
+        resetExtractionCache();
+        set({ files: [], folders: [], currentFileIndex: -1, currentFolder: null, activeFolders: [] });
+    },
     addFiles: (newFiles) => set((state) => ({ files: state.files.concat(newFiles) })),
 
     // === ACTIONS: Exclusions ===
@@ -661,11 +671,17 @@ const useMediaStore = create(persist((set, get) => ({
         set((state) => ({ metadataFilters: { ...state.metadataFilters, ...filters } }));
         get().updateProcessedFiles();
     },
+    _metadataDebounce: null,
     updateFileMetadata: (path, metadata) => {
         set((state) => ({
             files: state.files.map(f => f.path === path ? { ...f, ...metadata } : f)
         }));
-        get().updateProcessedFiles();
+        // Debounce the sort recalculation during batch extraction
+        if (get()._metadataDebounce) clearTimeout(get()._metadataDebounce);
+        const timeout = setTimeout(() => {
+            get().updateProcessedFiles();
+        }, 1000);
+        set({ _metadataDebounce: timeout });
     },
 
     // ... GRID TOGGLES ...
