@@ -379,10 +379,19 @@ const useMediaStore = create(persist((set, get) => ({
         return filtered;
     },
 
-    setAppViewMode: (mode) => set(state => ({
-        appViewMode: mode,
-        previousViewMode: state.appViewMode !== mode ? state.appViewMode : state.previousViewMode
-    })),
+    setAppViewMode: (mode) => set(state => {
+        const nextState = {
+            appViewMode: mode,
+            previousViewMode: state.appViewMode !== mode ? state.appViewMode : state.previousViewMode
+        };
+        // Safety: Wipe slideshow states when navigating back to standard (unless they just activated movieMode which doesn't use setAppViewMode)
+        if (mode !== 'slideshow') {
+            nextState.slideshowActive = false;
+            nextState.slideshowAutoAdvance = false;
+            nextState.superSlideshowActive = false;
+        }
+        return nextState;
+    }),
     setMediaContextMenu: (menu) => set({ mediaContextMenu: menu }),
 
     sendToEditor: async (mediaItem, currentFrame = 0, fullClip = false) => {
@@ -622,7 +631,11 @@ const useMediaStore = create(persist((set, get) => ({
     setGlobalViewMode: (mode) => set({ globalViewMode: mode }),
     setFullscreenMode: (val) => set({ fullscreenMode: val }),
     toggleFullscreen: () => set((state) => ({ fullscreenMode: !state.fullscreenMode })),
-    toggleMovieMode: () => set((state) => ({ movieMode: !state.movieMode })),
+    toggleMovieMode: () => set((state) => ({ 
+        movieMode: !state.movieMode,
+        // Safety: If we're exiting movie mode, turn off the slideshow timer so it doesn't bleed into standard grid
+        slideshowActive: state.movieMode ? false : state.slideshowActive
+    })),
     toggleCinemaMode: () => set((state) => ({ cinemaMode: !state.cinemaMode })), // Action
     setViewMode: (mode) => set({ viewMode: mode }),
     setExplorerViewMode: (mode) => set({ explorerViewMode: mode }),
