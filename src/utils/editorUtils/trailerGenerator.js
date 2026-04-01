@@ -96,16 +96,20 @@ export const generateTrailerSequence = (pool, settings) => {
 
     // Helper to find the most visually distinct timestamp furthest from previously used clips
     const getBestTrimStart = (maxStart, sourceReq, history) => {
-        if (!history || history.length === 0 || maxStart <= 0) {
-            return Math.floor(Math.random() * Math.max(0, maxStart));
+        const START_OFFSET_FRAMES = Math.floor(1.0 * DEFAULT_FPS); // Skip first 1 second to avoid black fades
+        const actualMaxStart = maxStart > START_OFFSET_FRAMES ? maxStart - START_OFFSET_FRAMES : maxStart;
+        const baseOffset = maxStart > START_OFFSET_FRAMES ? START_OFFSET_FRAMES : 0;
+
+        if (!history || history.length === 0 || actualMaxStart <= 0) {
+            return baseOffset + Math.floor(Math.random() * Math.max(0, actualMaxStart));
         }
         
-        let bestTrimStart = Math.floor(Math.random() * maxStart);
+        let bestTrimStart = baseOffset + Math.floor(Math.random() * actualMaxStart);
         let maxDistance = -1;
         const numCandidates = 15;
 
         for (let i = 0; i < numCandidates; i++) {
-            const candidate = Math.floor(Math.random() * maxStart);
+            const candidate = baseOffset + Math.floor(Math.random() * actualMaxStart);
             const candEnd = candidate + sourceReq;
             let minDist = Infinity;
             

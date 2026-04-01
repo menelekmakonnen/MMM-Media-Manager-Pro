@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import VideoPlayer from '../../VideoPlayer';
 import SlideshowOverlay from '../SlideshowOverlay';
 import ControlPanel from '../ControlPanel';
-import { globalURLCache } from '../../../utils/urlCache';
 import { ZoomIn, ZoomOut, RotateCw, RefreshCw, EyeOff } from 'lucide-react';
 import { VideoRegistryContext } from '../../../contexts/VideoRegistryContext.js';
+import { getMediaUrl } from '../../../utils/mediaUrl';
 
 const TRANSITION_VARIANTS = {
     none: {},
@@ -49,13 +49,13 @@ const SlideshowView = () => {
         setCurrentFileIndex,
         setSlideshowDuration,
         mediaFitMode,
-        globalIsPlaying, setGlobalIsPlaying
+        globalIsPlaying, setGlobalIsPlaying,
+        slideshowAutoAdvance, setSlideshowAutoAdvance
     } = useMediaStore();
 
     // Bind global play state
     const isPlaying = globalIsPlaying;
     const setIsPlaying = setGlobalIsPlaying;
-    const [isAutoAdvance, setIsAutoAdvance] = useState(true); // Duration Timer
 
     const gridSize = (gridColumns || 1) * (gridRows || 1);
 
@@ -120,17 +120,16 @@ const SlideshowView = () => {
     });
 
     useEffect(() => {
-        if (!isAutoAdvance) return;
+        if (!slideshowAutoAdvance) return;
 
         const durationMs = (slideshowDuration || 5) * 1000;
-        // console.log(`[Slideshow] Interval set for ${durationMs}ms`);
 
         const id = setInterval(() => {
             if (advanceRef.current) advanceRef.current();
         }, durationMs);
 
         return () => clearInterval(id);
-    }, [isAutoAdvance, slideshowDuration]);
+    }, [slideshowAutoAdvance, slideshowDuration]);
 
     // Idle Timer Logic
     useEffect(() => {
@@ -161,7 +160,7 @@ const SlideshowView = () => {
 
     const handleStopAll = () => {
         setIsPlaying(false);
-        setIsAutoAdvance(false);
+        setSlideshowAutoAdvance(false);
         // Do NOT reset currentFileIndex(0) - User requested only stopping playback
         videoRegistryRef.current.forEach(v => {
             if (v) {
@@ -231,8 +230,8 @@ const SlideshowView = () => {
                             // New Props
                             slideshowDuration={slideshowDuration}
                             setSlideshowDuration={setSlideshowDuration}
-                            isAutoAdvance={isAutoAdvance}
-                            setIsAutoAdvance={setIsAutoAdvance}
+                            isAutoAdvance={slideshowAutoAdvance}
+                            setIsAutoAdvance={setSlideshowAutoAdvance}
                         />
                     </div>
                 </div>
@@ -242,38 +241,14 @@ const SlideshowView = () => {
 };
 
 const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isActive, hideControls, forcePlay, slotIndex, mediaFitMode }) => {
-    const [url, setUrl] = useState(null);
     const isVideo = file.type === 'video';
-
-    // We must use a unique ID for the registry that is stable for the FILE, not the SLOT, 
-    // because as the video moves slots, we want it to stay registered or re-register properly.
-    // VideoPlayer uses `slotIndex` as the key.
-    // If we pass a changing slotIndex, it might unregister/register.
-    // Actually, `visibleFiles.map((..., i)` passes `i`.
-    // As items shift: File A is index 0. Then vanishes. File B is index 1 -> becomes index 0.
-    // VideoPlayer receives new slotIndex 0.
-    // It will unregister(1) and register(0).
-    // This is fine, provided the ref map handles it. 
-    // BUT we want to keep playing.
-    // `VideoPlayer` component is preserved due to key.
-    // `useEffect` for registry has `[slotIndex]`. It will run again.
-    // It will register the *same* video element to the *new* slot index.
-    // Is that okay? 
-    // Yes, handles playAll/pauseAll iterate over values. 
-    // Values are the video elements.
-    // As long as the video element is in the map, `playAll` works.
+    const [url, setUrl] = useState(null);
 
     useEffect(() => {
         let active = true;
-        const load = async () => {
-            if (!globalURLCache) {
-                console.error("Global URL Cache is missing!");
-                return;
-            }
-            const objectUrl = await globalURLCache.getObjectURL(file);
-            if (active) setUrl(objectUrl);
-        };
-        load();
+        if (file?.handle) {
+            getMediaUrl(file).then(u => { if (active) setUrl(u); });
+        }
         return () => { active = false; };
     }, [file]);
 
@@ -289,7 +264,7 @@ const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isAc
                     masterVolume={isMasterMuted ? 0 : masterVolume}
                     masterPlaybackRate={masterPlaybackRate}
                     forcePlay={forcePlay}
-                    slotIndex={slotIndex} // This changes as it moves
+                    slotIndex={slotIndex}
                     hideControls={hideControls}
                     mediaFitMode={mediaFitMode}
                 />

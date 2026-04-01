@@ -63,6 +63,7 @@ const DualRangeSlider = ({ label, value, min, max, onChange, unit = 's', disable
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dragging, value]);
 
     const startPercent = ((value[0] - min) / (max - min)) * 100;
@@ -117,7 +118,61 @@ const DualRangeSlider = ({ label, value, min, max, onChange, unit = 's', disable
     );
 };
 
-const TrailerModal = () => {
+const WaveformVisualizer = ({ duration, peaks, start, end }) => {
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !peaks || peaks.length === 0 || !duration) return;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw baseline
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Draw peaks
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.6)'; // Purple matches theme
+        const barWidth = Math.max(1, width / (duration * 10)); // Arbitrary density
+
+        peaks.forEach(peak => {
+            const x = (peak.time / duration) * width;
+            const barHeight = peak.energy * height * 0.8; // scale by energy
+            const y = (height - barHeight) / 2;
+            ctx.fillRect(x - (barWidth/2), y, barWidth, barHeight);
+        });
+
+        // Overlay active region
+        const startX = (start / duration) * width;
+        const endX = (end / duration) * width;
+        
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; // Blue tint for selected
+        ctx.fillRect(startX, 0, endX - startX, height);
+        
+        // Render boundary lines
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillRect(startX - 1, 0, 2, height);
+        ctx.fillRect(endX - 1, 0, 2, height);
+
+    }, [peaks, duration, start, end]);
+
+    return (
+        <canvas 
+            ref={canvasRef} 
+            width={800} 
+            height={80} 
+            className="w-full h-20 bg-black/40 rounded-lg border border-white/5"
+        />
+    );
+};
+
+const TrailerModal = ({ isEmbedded = false }) => {
     const [showExclusions, setShowExclusions] = React.useState(false);
     const [audioFile, setAudioFile] = React.useState(null);
     const [audioUrl, setAudioUrl] = React.useState(null);
@@ -129,10 +184,11 @@ const TrailerModal = () => {
     const audioRef = useRef(null);
     const audioInputRef = useRef(null);
     const [isRandomizingAudio, setIsRandomizingAudio] = React.useState(false);
+    const [audioPeaks, setAudioPeaks] = React.useState([]);
     const { 
         isTrailerModalOpen, setTrailerModalOpen, 
         trailerSettings, setTrailerSettings,
-        explorerSelectedFiles, getSortedFiles, setAppViewMode,
+        explorerSelectedFiles, getSortedFiles, setAppViewMode, setTrailerDraftSequence,
         files, folders, toggleFolderExclusion, excludedFolders
     } = useMediaStore();
 
@@ -148,11 +204,31 @@ const TrailerModal = () => {
         setAudioPlaying(false);
     };
 
-    const handleAudioLoaded = () => {
+    // Waveform reactivity
+    useEffect(() => {
+        if (!audioFile) return;
+        let active = true;
+        
+        const reanalyze = async () => {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const arrayBuffer = await audioFile.arrayBuffer();
+                const buffer = await ctx.decodeAudioData(arrayBuffer);
+                const { peaks } = await analyzeAudio(buffer, trailerSettings.beatSensitivity);
+                if (active) setAudioPeaks(peaks);
+            } catch (e) {
+                console.warn("Waveform decoding failed", e);
+            }
+        };
+
+        const t = setTimeout(reanalyze, 300);
+        return () => { active = false; clearTimeout(t); };
+    }, [audioFile, trailerSettings.beatSensitivity]);
+
+    const handleAudioLoaded = async () => {
         const dur = audioRef.current?.duration || 0;
         setAudioMeta({ duration: dur });
         
-        // Sync to store state if available to prevent steamrolling previous edits 
         if (trailerSettings.audioTrimEnd) {
             setAudioTrimStart(trailerSettings.audioTrimStart || 0);
             setAudioTrimEnd(trailerSettings.audioTrimEnd);
@@ -169,7 +245,7 @@ const TrailerModal = () => {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const arrayBuffer = await audioFile.arrayBuffer();
             const buffer = await ctx.decodeAudioData(arrayBuffer);
-            const { peaks } = await analyzeAudio(buffer);
+            const { peaks } = await analyzeAudio(buffer, trailerSettings.beatSensitivity);
 
             const targetDur = trailerSettings.targetDuration || 30;
             const safePeaks = peaks.filter(p => p.time <= buffer.duration - targetDur);
@@ -253,26 +329,37 @@ const TrailerModal = () => {
 
     const handleGenerate = () => {
         setTrailerModalOpen(false);
-        setAppViewMode('trailerView');
+        if (isEmbedded) {
+            setTrailerDraftSequence([]); // Trigger Router to mount TrailerView
+        } else {
+            setTrailerDraftSequence([]);
+            setAppViewMode('trailer');
+        }
     };
 
-    if (!isTrailerModalOpen) return null;
+    if (!isTrailerModalOpen && !isEmbedded) return null;
+
+    const modalLayoutClass = isEmbedded 
+        ? "relative w-full max-w-4xl mx-auto my-12 bg-[#11111a]/80 backdrop-blur-xl rounded-2xl border border-white/10 shadow-[0_0_100px_rgba(168,85,247,0.15)] overflow-hidden flex flex-col"
+        : "relative bg-[#11111a] w-full max-w-3xl max-h-[90vh] rounded-2xl border border-white/10 shadow-[0_0_100px_rgba(168,85,247,0.15)] overflow-hidden flex flex-col";
 
     return (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 overflow-y-auto">
-            <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                exit={{ opacity: 0 }} 
-                className="fixed inset-0 bg-black/80 backdrop-blur-xl" 
-                onClick={() => setTrailerModalOpen(false)} 
-            />
+        <div className={clsx("flex items-center justify-center p-4 overflow-y-auto", isEmbedded ? "min-h-full" : "fixed inset-0 z-[100000]")}>
+            {!isEmbedded && (
+                <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }} 
+                    className="fixed inset-0 bg-black/80 backdrop-blur-xl" 
+                    onClick={() => setTrailerModalOpen(false)} 
+                />
+            )}
             
             <motion.div 
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative bg-[#11111a] w-full max-w-2xl max-h-[90vh] rounded-2xl border border-white/10 shadow-[0_0_100px_rgba(168,85,247,0.15)] overflow-hidden flex flex-col"
+                initial={isEmbedded ? false : { opacity: 0, scale: 0.95, y: 20 }}
+                animate={isEmbedded ? false : { opacity: 1, scale: 1, y: 0 }}
+                exit={isEmbedded ? false : { opacity: 0, scale: 0.95, y: 20 }}
+                className={modalLayoutClass}
             >
                 {/* Header Container */}
                 <div className="p-6 pb-4 border-b border-white/5 bg-gradient-to-r from-purple-500/10 to-blue-500/10">
@@ -381,14 +468,6 @@ const TrailerModal = () => {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button 
-                                        onClick={handleRandomizeAudioBeat} 
-                                        disabled={isRandomizingAudio}
-                                        title="Snap Random Beat to Sequence limit" 
-                                        className="p-2 bg-emerald-500/10 hover:bg-emerald-500/30 rounded shadow transition-all text-emerald-400 hover:text-emerald-100 border border-emerald-500/20"
-                                    >
-                                        {isRandomizingAudio ? <Loader2 size={14} className="animate-spin" /> : <Dna size={14} />}
-                                    </button>
                                     <button onClick={() => {
                                         if (trailerSettings.useAudioGuide) {
                                             setAudioTrimStart(trailerSettings.audioTrimStart || 0);
@@ -418,6 +497,19 @@ const TrailerModal = () => {
                                     <option className="bg-black text-white" value="original">Original Release (Full Volume)</option>
                                     <option className="bg-black text-white" value="ducking">Smart Ducking (Paced Alternating)</option>
                                 </select>
+                                
+                                <div className="pt-4 border-t border-white/5 mt-4 group">
+                                    <SliderControl
+                                        label="Beat Sensitivity Core"
+                                        icon={Zap}
+                                        value={trailerSettings.beatSensitivity}
+                                        min={0.0} max={1.0} step={0.1} unit=""
+                                        onChange={(v) => setTrailerSettings({ beatSensitivity: v })}
+                                    />
+                                    <p className="text-[9px] text-white/30 uppercase mt-2 tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                        Higher bounds detect micro-beats like hi-hats. Lower bounds isolate hard drops. Realtime visualizer.
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -673,12 +765,24 @@ const TrailerModal = () => {
                                     }}
                                 />
                                 
-                                <div className="text-center">
-                                    <p className="text-xs text-white/50 mb-1">Total Track Length: {audioMeta.duration.toFixed(1)}s</p>
-                                    <p className="text-sm font-bold text-white">Select a segment to guide your trailer</p>
+                                <div className="text-center flex items-center justify-center gap-3">
+                                    <div className="flex flex-col items-center">
+                                        <p className="text-xs text-white/50 mb-1">Total Track Length: {audioMeta.duration.toFixed(1)}s</p>
+                                        <p className="text-sm font-bold text-white">Select a segment to guide your trailer</p>
+                                    </div>
+                                    <button 
+                                        onClick={handleRandomizeAudioBeat}
+                                        disabled={isRandomizingAudio || !audioFile}
+                                        className="p-2 bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/40 hover:to-blue-500/40 rounded-lg text-purple-300 border border-purple-500/30 transition-all flex items-center gap-2"
+                                        title="Snap Random beat to sequence limit"
+                                    >
+                                        {isRandomizingAudio ? <Loader2 size={16} className="animate-spin" /> : <Dna size={16} />}
+                                    </button>
                                 </div>
                                 
                                 <div className="space-y-6">
+                                    <WaveformVisualizer duration={audioMeta.duration} peaks={audioPeaks} start={audioTrimStart} end={audioTrimEnd} />
+
                                     <DualRangeSlider
                                         label="Active Audio Region"
                                         value={[audioTrimStart, audioTrimEnd]}

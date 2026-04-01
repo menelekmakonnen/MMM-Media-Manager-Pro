@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import useMediaStore from '../../../stores/useMediaStore';
 import clsx from 'clsx';
-import { Settings2, Keyboard, Sliders, Layout, Film, Image as ImageIcon, LayoutGrid, Check, CheckCircle2 } from 'lucide-react';
+import { Settings2, Keyboard, Sliders, Layout, Film, Image as ImageIcon, LayoutGrid, Check, CheckCircle2, MonitorPlay } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const SettingsView = () => {
@@ -12,6 +12,7 @@ const SettingsView = () => {
         { id: 'general', label: 'General / System', icon: Settings2 },
         { id: 'appearance', label: 'Appearance & Themes', icon: Layout },
         { id: 'standard', label: 'Grid / Slideshow', icon: LayoutGrid },
+        { id: 'stream', label: 'Stream Engine', icon: MonitorPlay },
         { id: 'gallery', label: 'Gallery Engine', icon: ImageIcon },
         { id: 'editor', label: 'Timeline Editor', icon: Film },
         { id: 'keyboard', label: 'Keyboard Mapping', icon: Keyboard },
@@ -23,6 +24,7 @@ const SettingsView = () => {
             case 'general': return <GeneralSettings />;
             case 'appearance': return <AppearanceSettings />;
             case 'standard': return <StandardSlideshowSettings />;
+            case 'stream': return <StreamSettings />;
             case 'gallery': return <GallerySettings />;
             case 'editor': return <EditorSettings />;
             case 'keyboard': return <KeyboardSettings />;
@@ -541,6 +543,84 @@ const EditorSettings = () => {
     );
 };
 
+const StreamSettings = () => {
+    const { 
+        streamFeaturedFrequency, setStreamFeaturedFrequency,
+        streamRowScrollMode, setStreamRowScrollMode,
+        streamLayoutMode, setStreamLayoutMode,
+        streamClusteringMode, setStreamClusteringMode,
+        streamCategorizationMode, setStreamCategorizationMode
+    } = useMediaStore();
+
+    return (
+        <div className="space-y-6">
+            <SettingsHeader title="Stream Content Engine" description="Configure the cinematic media stream experience." />
+            
+            <SettingSection title="Hero Spotlight">
+                 <SelectInput
+                     label="Featured Video Rotation"
+                     description="How often should the massive spotlight video at the top of the stream refresh its randomized selection?"
+                     value={streamFeaturedFrequency}
+                     onChange={setStreamFeaturedFrequency}
+                     options={[
+                         {label: 'On Every Load', value: 'always'},
+                         {label: 'Once Every Hour', value: 'hourly'},
+                         {label: 'Once a Day', value: 'daily'}
+                     ]}
+                 />
+            </SettingSection>
+
+            <SettingSection title="Carousel Rows">
+                 <SelectInput
+                     label="Row Categorization Engine"
+                     description="Define what system metadata determines how rows are grouped."
+                     value={streamCategorizationMode}
+                     onChange={setStreamCategorizationMode}
+                     options={[
+                         {label: 'Dual System (Folders & Smart Tags)', value: 'both'},
+                         {label: 'Strict File Folders Only', value: 'folders'},
+                         {label: 'Smart Tags Only (Featured, Dates, Clusters)', value: 'system'}
+                     ]}
+                 />
+                 <Divider />
+                 <SelectInput
+                     label="Similar Name Clustering"
+                     description="How should the dynamically generated rows group similar files together?"
+                     value={streamClusteringMode}
+                     onChange={setStreamClusteringMode}
+                     options={[
+                         {label: 'Intelligent Prefix Matching (Default)', value: 'prefix'},
+                         {label: 'Delimiter Split (Spaces, Underscores)', value: 'delimiter'}
+                     ]}
+                 />
+                 <Divider />
+                 <SelectInput
+                     label="Row Sliding Behavior"
+                     description="Should the horizontal carousels smoothly float continuously like an ambient screen saver, or only scroll manually on interaction?"
+                     value={streamRowScrollMode}
+                     onChange={setStreamRowScrollMode}
+                     options={[
+                         {label: 'Auto float infinitely', value: 'float'},
+                         {label: 'Manual Scroll Only', value: 'manual'}
+                     ]}
+                 />
+                 <Divider />
+                 <SelectInput
+                     label="Layout Formats"
+                     description="How should the different aspect ratios of your media be displayed?"
+                     value={streamLayoutMode}
+                     onChange={setStreamLayoutMode}
+                     options={[
+                         {label: 'Mixed Ratios (YouTube style mixed)', value: 'mixed'},
+                         {label: 'Force Horizontal Cards Only (Cinema)', value: 'horizontal'},
+                         {label: 'Force Vertical Cards Only (TikTok)', value: 'vertical'}
+                     ]}
+                 />
+            </SettingSection>
+        </div>
+    );
+};
+
 const KeyGrabber = ({ actionLabel, currentKey, onRebind }) => {
     const [isListening, setIsListening] = useState(false);
 
@@ -650,6 +730,7 @@ const SelfSettings = () => {
                          {label: 'General App Config', value: 'general'},
                          {label: 'Appearance Configuration', value: 'appearance'},
                          {label: 'Grid / Slideshow Engine', value: 'standard'},
+                         {label: 'Stream Formatter', value: 'stream'},
                          {label: 'Gallery Formatter', value: 'gallery'},
                          {label: 'Timeline Editor Options', value: 'editor'},
                          {label: 'Keyboard Keybindings Tracker', value: 'keyboard'},

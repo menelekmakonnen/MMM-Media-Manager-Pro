@@ -35,7 +35,6 @@ const useMediaStore = create(persist((set, get) => ({
     scannedCount: 0,
     currentWorker: null,
 
-    // === TRAILER SETTINGS ===
     trailerSettings: {
         template: 'social', // 'social' | 'epic' | 'gym' | 'kinetic' | 'custom'
         targetDuration: 30, // seconds
@@ -47,12 +46,35 @@ const useMediaStore = create(persist((set, get) => ({
         audioMixStrategy: 'muted', // 'muted' | 'subtle' | 'original' | 'ducking'
         slowmoPolicy: 'none', // 'none' | 'mixed' | 'all'
         audioTimelineStrategy: 'loop', // 'loop' | 'fade' | 'continue'
-        matchAudioDuration: true
+        matchAudioDuration: true,
+        beatSensitivity: 0.5
     },
     setTrailerSettings: (settings) => set(state => ({ trailerSettings: { ...state.trailerSettings, ...settings } })),
     
     isTrailerModalOpen: false,
     setTrailerModalOpen: (val) => set({ isTrailerModalOpen: val }),
+
+    trailerDraftSequence: null,
+    setTrailerDraftSequence: (seq) => set({ trailerDraftSequence: seq }),
+    clearTrailerDraftSequence: () => set({ trailerDraftSequence: null }),
+    trailerUnsavedPromptEnabled: true,
+    setTrailerUnsavedPromptEnabled: (val) => set({ trailerUnsavedPromptEnabled: val }),
+
+    // === STREAM SETTINGS ===
+    streamFeaturedFrequency: 'always', // 'always' | 'hourly' | 'daily'
+    setStreamFeaturedFrequency: (val) => set({ streamFeaturedFrequency: val }),
+    streamFeaturedSeed: 0,
+    setStreamFeaturedSeed: (val) => set({ streamFeaturedSeed: val }),
+    streamLastFeatured: 0, // Timestamp
+    setStreamLastFeatured: (val) => set({ streamLastFeatured: val }),
+    streamRowScrollMode: 'float', // 'auto' | 'float'
+    setStreamRowScrollMode: (val) => set({ streamRowScrollMode: val }),
+    streamLayoutMode: 'mixed', // 'mixed' | 'horizontal' | 'vertical'
+    setStreamLayoutMode: (val) => set({ streamLayoutMode: val }),
+    streamClusteringMode: 'prefix', // 'prefix' | 'delimiter'
+    setStreamClusteringMode: (val) => set({ streamClusteringMode: val }),
+    streamCategorizationMode: 'both', // 'folders' | 'system' | 'both'
+    setStreamCategorizationMode: (val) => set({ streamCategorizationMode: val }),
 
     // === MULTI-SELECTION STATE ===
     explorerSelectedFiles: new Set(),
@@ -173,11 +195,7 @@ const useMediaStore = create(persist((set, get) => ({
     _procTimeout: null,
     _lastProcTime: 0,
 
-    setExplorerSearchQuery: (query) => {
-        set({ explorerSearchQuery: query });
-        get().updateProcessedFiles();
-    },
-    
+
     // === SETTINGS VIEW CONFIGURATIONS ===
     defaultGridCount: 1, setDefaultGridCount: (c) => set({ defaultGridCount: c }),
     cinemaModeOnLaunch: false, setCinemaModeOnLaunch: (v) => set({ cinemaModeOnLaunch: v }),
@@ -230,6 +248,8 @@ const useMediaStore = create(persist((set, get) => ({
     toggleThemeMode: () => set(state => ({ themeMode: state.themeMode === 'dark' ? 'deep' : 'dark' })),
     threeGridEqual: false,
     setThreeGridEqual: (val) => set({ threeGridEqual: val }),
+    slideshowAutoAdvance: true,
+    setSlideshowAutoAdvance: (val) => set({ slideshowAutoAdvance: val }),
     nineGridHero: false,
     setNineGridHero: (val) => set({ nineGridHero: val }),
 
@@ -269,9 +289,6 @@ const useMediaStore = create(persist((set, get) => ({
         setTimeout(() => useMediaStore.getState().updateProcessedFiles(), 0);
         return newState;
     }),
-    slideshowActive: false,
-    slideshowRandom: false,
-    setSlideshowRandom: (val) => set({ slideshowRandom: val }),
 
     setExplorerGridColumns: (cols) => set({ explorerGridColumns: cols }),
 
@@ -320,14 +337,13 @@ const useMediaStore = create(persist((set, get) => ({
         // Apply Metadata Filters for parity
         if (metadataFilters.aspectRatio !== 'all') {
             filtered = filtered.filter(f => {
-                // Determine aspect ratio, default to landscape if missing but allow fallback
-                const w = f.width || (f.hasVideos ? 1920 : 1500); 
-                const h = f.height || (f.hasVideos ? 1080 : 1000);
-                const ar = w / h;
+                // Absolute orientation: width > height = landscape, height > width = portrait, equal = square
+                const w = f.width || 0;
+                const h = f.height || 0;
                 
-                if (metadataFilters.aspectRatio === 'landscape') return ar > 1.2;
-                if (metadataFilters.aspectRatio === 'portrait') return ar < 0.8;
-                if (metadataFilters.aspectRatio === 'square') return ar >= 0.8 && ar <= 1.2;
+                if (metadataFilters.aspectRatio === 'landscape') return w > h;
+                if (metadataFilters.aspectRatio === 'portrait') return h > w;
+                if (metadataFilters.aspectRatio === 'square') return w === h;
                 return true;
             });
         }
@@ -407,15 +423,22 @@ const useMediaStore = create(persist((set, get) => ({
     },
 
     startSlideshowAt: (path) => {
-        const { processedFiles, setCurrentFileIndex, setAppViewMode } = get();
+        const { processedFiles, setCurrentFileIndex, setAppViewMode, appViewMode } = get();
         const index = processedFiles.findIndex(f => f.path === path);
         if (index !== -1) {
             setCurrentFileIndex(index);
+            if (appViewMode === 'stream') {
+                set({ 
+                    slideshowAutoAdvance: false, 
+                    gridColumns: 1, 
+                    gridRows: 1,
+                    slideshowActive: true
+                });
+            } else {
+                set({ slideshowActive: true });
+            }
             setAppViewMode('slideshow');
-            set({ slideshowActive: true });
         } else {
-            // Fallback if not found in processed (e.g. filter hidden it?), try raw or warn?
-            // For now, if not in processed, we shouldn't show it as it breaks the "match grid" rule.
             console.warn("File not found in current view filters:", path);
         }
     },
@@ -709,28 +732,10 @@ const useMediaStore = create(persist((set, get) => ({
         set((state) => ({ sortOrder: state.sortOrder === 'asc' ? 'desc' : 'asc' }));
         get().updateProcessedFiles();
     },
-    shuffleFiles: () => {
-        set((state) => ({
-            sortBy: 'random',
-            sortStack: [{ field: 'random', order: 'asc' }],
-            shuffleSeed: state.shuffleSeed + 1
-        }));
-        get().updateProcessedFiles();
-    },
     setFolderSortMode: (mode) => set({ folderSortMode: mode }),
-    setShowDuplicates: (val) => {
-        set({ showDuplicates: val });
-        get().updateProcessedFiles();
-    },
+
     setSidebarGridColumns: (cols) => set({ sidebarGridColumns: cols }),
 
-    // === ACTIONS: Display ===
-    // === ACTIONS: Display ===
-    setGrayscaleInactive: (value) => set({ grayscaleInactive: value }),
-    setThumbnailSize: (size) => set({ thumbnailSize: size }),
-    setThumbnailOrientation: (orientation) => set({ thumbnailOrientation: orientation }),
-    setZoomMode: (mode) => set({ zoomMode: mode }),
-    setWidescreen: (value) => set({ widescreen: value }),
 
     // === ROTATION & SPEED ===
     masterPlaybackRate: 1,
@@ -805,10 +810,12 @@ const useMediaStore = create(persist((set, get) => ({
         const { metadataFilters } = get();
         if (metadataFilters.aspectRatio !== 'all') {
             filtered = filtered.filter(f => {
-                const ar = (f.width || 1) / (f.height || 1);
-                if (metadataFilters.aspectRatio === 'landscape') return ar > 1.2;
-                if (metadataFilters.aspectRatio === 'portrait') return ar < 0.8;
-                if (metadataFilters.aspectRatio === 'square') return ar >= 0.8 && ar <= 1.2;
+                // Absolute orientation: width > height = landscape, height > width = portrait, equal = square
+                const w = f.width || 0;
+                const h = f.height || 0;
+                if (metadataFilters.aspectRatio === 'landscape') return w > h;
+                if (metadataFilters.aspectRatio === 'portrait') return h > w;
+                if (metadataFilters.aspectRatio === 'square') return w === h;
                 return true;
             });
         }
@@ -934,7 +941,6 @@ const useMediaStore = create(persist((set, get) => ({
         metadataFilters: state.metadataFilters,
         fileTypeFilter: state.fileTypeFilter,
         threeGridEqual: state.threeGridEqual,
-        threeGridEqual: state.threeGridEqual,
         nineGridHero: state.nineGridHero,
         galleryZoom: state.galleryZoom,
         galleryFilter: state.galleryFilter,
@@ -954,14 +960,34 @@ const useMediaStore = create(persist((set, get) => ({
 // Helper to get safe sort values
 function getSortValue(file, field) {
     switch (field) {
-        case 'name': return file.name;
+        case 'name':
+        case 'title': return file.name;
         case 'type': return file.type;
         case 'size': return file.size || 0;
         case 'date':
-        case 'lastModified': return file.lastModified || 0;
+        case 'lastModified':
+        case 'dateModified': return file.lastModified || 0;
+        case 'dateCreated':
         case 'dateAdded': return file.created || file.lastModified || 0;
-        case 'dimensions': return (file.width || 0) * (file.height || 0); // Area
+        case 'mediaDate': return file.mediaDate || file.lastModified || 0;
+        case 'dimensions': return (file.width || 0) * (file.height || 0); // Frame area (H × W)
+        case 'frameSize': {
+            // Sort by height first, then width (useful for grouping resolutions)
+            const h = file.height || 0;
+            const w = file.width || 0;
+            return h * 100000 + w;
+        }
         case 'aspectRatio': return (file.width || 1) / (file.height || 1);
+        case 'length':
+        case 'duration': return file.duration || 0;
+        case 'framerate': return file.framerate || file.fps || 0;
+        case 'bitrate': return file.bitrate || 0;
+        case 'year': {
+            const ts = file.mediaDate || file.lastModified || 0;
+            return ts ? new Date(ts).getFullYear() : 0;
+        }
+        case 'folder':
+        case 'folders': return file.folderPath || '';
         case 'path': return (file.folderPath || '') + '/' + file.name;
         case 'nameLength': return file.name.length;
         default: return 0;

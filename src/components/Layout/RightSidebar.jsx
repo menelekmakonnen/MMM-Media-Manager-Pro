@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import clsx from 'clsx';
-import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Film, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target, Wand2 } from 'lucide-react';
+import { FileType, Calendar, HardDrive, Maximize, RectangleHorizontal, Film, Filter, ChevronUp, ChevronDown, Shuffle, LayoutGrid, Square, Columns, Columns3, Grid2X2, Table, Grid3X3, Star, Target, Wand2, Folder, Clock, Gauge, Activity, MonitorPlay, Ratio, CalendarDays, CalendarPlus, Type } from 'lucide-react';
 
 const formatBytes = (bytes, decimals = 2) => {
     if (!+bytes) return '0 B';
@@ -75,8 +75,39 @@ const RightSidebar = () => {
         // Grid Options
         gridColumns, gridRows, threeGridEqual,
         toggleDual, toggleTriple, toggleQuad, toggleSix, toggleNine, toggleTwelve, setGridLayout,
-        setTrailerModalOpen
+        setTrailerModalOpen,
+        currentFileIndex, processedFiles, pinnedGrids
     } = useMediaStore();
+
+    // Compute what's in the active grids for the "active grids" trailer button
+    const handleTrailerWithFolder = () => {
+        // Standard behavior — use all videos in the current folder/selection
+        setTrailerModalOpen(true);
+    };
+
+    const handleTrailerWithGrids = () => {
+        // Select only the items currently visible in the grid slots
+        const totalSlots = gridColumns * gridRows;
+        const baseIndex = currentFileIndex < 0 ? 0 : currentFileIndex % Math.max(1, processedFiles.length);
+        const gridFiles = [];
+
+        for (let i = 0; i < totalSlots; i++) {
+            if (pinnedGrids && pinnedGrids[i]) {
+                gridFiles.push(pinnedGrids[i]);
+            } else {
+                const wrappedIndex = (baseIndex + i) % Math.max(1, processedFiles.length);
+                if (processedFiles[wrappedIndex]) {
+                    gridFiles.push(processedFiles[wrappedIndex]);
+                }
+            }
+        }
+
+        // Set the active grid files as the explorer selection, then open trailer modal
+        const store = useMediaStore.getState();
+        const paths = new Set(gridFiles.filter(f => f?.path).map(f => f.path));
+        store.setExplorerSelectedFiles(paths);
+        setTrailerModalOpen(true);
+    };
 
     return (
         <div className="h-full w-full glass-sidebar border-l border-[var(--glass-border)] flex flex-col text-[10px]">
@@ -89,6 +120,33 @@ const RightSidebar = () => {
                 </div>
 
                 <div className="p-0">
+                    {/* GENERATORS — MOVED TO TOP */}
+                    <FilterSection title="Make a Trailer" expanded={true}>
+                        <div className="space-y-2">
+                            <button
+                                onClick={handleTrailerWithFolder}
+                                className="w-full flex items-center justify-between p-1.5 rounded text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600/30 to-blue-600/30 text-white hover:from-purple-500/50 hover:to-blue-500/50 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)] transition-all hover:scale-[1.02] overflow-hidden"
+                            >
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                    <Wand2 size={12} className="text-purple-300 shrink-0" />
+                                    <span className="truncate">...with all in folder</span>
+                                </div>
+                            </button>
+                            <button
+                                onClick={handleTrailerWithGrids}
+                                className="w-full flex items-center justify-between p-1.5 rounded text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-emerald-600/30 to-teal-600/30 text-white hover:from-emerald-500/50 hover:to-teal-500/50 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)] transition-all hover:scale-[1.02] overflow-hidden"
+                            >
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                    <LayoutGrid size={12} className="text-emerald-300 shrink-0" />
+                                    <span className="truncate">...with active grids</span>
+                                </div>
+                                <span className="text-[9px] font-mono bg-emerald-500/30 text-emerald-200 px-1.5 rounded shrink-0 ml-1">
+                                    {gridColumns * gridRows}
+                                </span>
+                            </button>
+                        </div>
+                    </FilterSection>
+
                     {/* METADATA FILTERS */}
                     <FilterSection title="Metadata Filters" expanded={true}>
                         <div className="space-y-3">
@@ -127,38 +185,6 @@ const RightSidebar = () => {
                         </div>
                     </FilterSection>
 
-                    {/* SORTING STACK */}
-                    <FilterSection title="Sorting Order" expanded={true}>
-                        <div className="space-y-1">
-                            <SortToggle field="name" label="Name" icon={FileType} />
-                            <SortToggle field="date" label="Date Modified" icon={Calendar} />
-                            <SortToggle field="size" label="Size" icon={HardDrive} />
-                            <SortToggle field="dimensions" label="Dimensions (Area)" icon={Maximize} />
-                            <SortToggle field="aspectRatio" label="Aspect Ratio" icon={RectangleHorizontal} />
-                            <div className="h-px bg-white/5 my-1" />
-                            <SortToggle field="path" label="Default (Path)" icon={Film} />
-                            
-                            <button
-                                onClick={() => shuffleFiles()}
-                                className={clsx(
-                                    "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all overflow-hidden",
-                                    sortStack[0]?.field === 'random' ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
-                                )}
-                                title="Randomize"
-                            >
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <Shuffle size={14} className="shrink-0" />
-                                    <span className="font-medium truncate text-left">Randomize</span>
-                                </div>
-                                {sortStack[0]?.field === 'random' && (
-                                    <span className="text-[9px] font-mono bg-[var(--accent-primary)] text-white px-1 rounded shrink-0 ml-2">
-                                        RND
-                                    </span>
-                                )}
-                            </button>
-                        </div>
-                    </FilterSection>
-
                     {/* GRID LAYOUT */}
                     <FilterSection title="Grid Layout" expanded={true}>
                         <div className="grid grid-cols-2 lg:grid-cols-2 gap-1.5 overflow-hidden">
@@ -193,14 +219,49 @@ const RightSidebar = () => {
                         </div>
                     </FilterSection>
 
-                    {/* GENERATORS */}
-                    <FilterSection title="Generators" expanded={true}>
-                        <div className="space-y-3">
+                    {/* SORTING STACK — EXPANDED */}
+                    <FilterSection title="Sorting Order" expanded={true}>
+                        <div className="space-y-1">
+                            {/* --- PRIMARY SORTS --- */}
+                            <SortToggle field="name" label="Title / Name" icon={Type} />
+                            <SortToggle field="folder" label="Folder" icon={Folder} />
+                            <SortToggle field="dateModified" label="Date Modified" icon={Calendar} />
+                            <SortToggle field="dateCreated" label="Date Created" icon={CalendarPlus} />
+                            <SortToggle field="mediaDate" label="Media Date" icon={CalendarDays} />
+                            <SortToggle field="size" label="Size" icon={HardDrive} />
+                            <SortToggle field="duration" label="Length / Duration" icon={Clock} />
+
+                            <div className="h-px bg-white/5 my-1" />
+
+                            {/* --- TECHNICAL SORTS --- */}
+                            <SortToggle field="dimensions" label="Frame Height × Width" icon={Maximize} />
+                            <SortToggle field="aspectRatio" label="Aspect Ratio" icon={RectangleHorizontal} />
+                            <SortToggle field="framerate" label="Framerate" icon={Gauge} />
+                            <SortToggle field="bitrate" label="Bit Rate" icon={Activity} />
+                            <SortToggle field="year" label="Year" icon={CalendarDays} />
+                            <SortToggle field="type" label="Video / Item Type" icon={MonitorPlay} />
+
+                            <div className="h-px bg-white/5 my-1" />
+
+                            <SortToggle field="path" label="Default (Path)" icon={Film} />
+                            
                             <button
-                                onClick={() => setTrailerModalOpen(true)}
-                                className="w-full flex items-center justify-between p-2 rounded text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600/30 to-blue-600/30 text-white hover:from-purple-500/50 hover:to-blue-500/50 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)] transition-all hover:scale-[1.02]"
+                                onClick={() => shuffleFiles()}
+                                className={clsx(
+                                    "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all overflow-hidden",
+                                    sortStack[0]?.field === 'random' ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
+                                )}
+                                title="Randomize"
                             >
-                                <span className="flex items-center gap-2"><Wand2 size={14} className="text-purple-300" /> Make a Trailer</span>
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Shuffle size={14} className="shrink-0" />
+                                    <span className="font-medium truncate text-left">Randomize</span>
+                                </div>
+                                {sortStack[0]?.field === 'random' && (
+                                    <span className="text-[9px] font-mono bg-[var(--accent-primary)] text-white px-1 rounded shrink-0 ml-2">
+                                        RND
+                                    </span>
+                                )}
                             </button>
                         </div>
                     </FilterSection>

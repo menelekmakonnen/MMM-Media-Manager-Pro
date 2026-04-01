@@ -12,7 +12,7 @@ export const EditsTab = () => {
     const { savedEdits, removeEdit } = useProjectStore();
     const { setClips, clearAllClips } = useClipStore();
     const { setActiveTab } = useViewStore();
-    const { currentFolder } = useMediaStore();
+    const { currentFolder, files } = useMediaStore();
 
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
@@ -153,16 +153,35 @@ export const EditsTab = () => {
                                     className="bg-black/40 rounded-2xl border border-white/5 overflow-hidden shadow-2xl group flex flex-col"
                                 >
                                     {/* Thumbnail Placeholder Area */}
-                                    <div className="h-32 bg-gradient-to-br from-[#111] to-[#0a0a1a] relative border-b border-white/5 px-5 py-4 flex flex-col justify-end">
-                                        <div className="absolute top-4 right-4 bg-black/60 px-2 py-1 rounded text-[10px] font-mono font-bold text-white/50 flex items-center gap-1.5 backdrop-blur-sm border border-white/10">
+                                    <div className="h-40 bg-gradient-to-br from-[#111] to-[#0a0a1a] relative border-b border-white/5 flex flex-col justify-end overflow-hidden group/thumb">
+                                        {/* Background Thumbnail Image/Video Cover */}
+                                        {(() => {
+                                            const thumbUrl = files.find(f => f.path === edit.thumbnailPath)?.url;
+                                            if (!thumbUrl) return null;
+                                            // Handle Video
+                                            if (edit.thumbnailPath.match(/\.(mp4|webm|mkv|mov)$/i)) {
+                                                return <video src={thumbUrl} className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover/thumb:opacity-80 transition-opacity duration-500" muted autoPlay loop playsInline />;
+                                            }
+                                            // Handle Images
+                                            return <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover/thumb:opacity-80 transition-opacity duration-500" alt="Thumbnail" />;
+                                        })()}
+
+                                        {/* Overlay Grade */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
+
+                                        {/* Thumb Stats overlay */}
+                                        <div className="absolute top-4 right-4 bg-black/60 px-2 py-1 rounded text-[10px] font-mono font-bold text-white/50 flex items-center gap-1.5 backdrop-blur-sm border border-white/10 z-10">
                                             <PlayCircle size={10} /> {edit.clips?.length || 0} Cuts
                                         </div>
-                                        <h3 className="text-sm font-black text-white truncate drop-shadow-md">
-                                            {edit.name || 'Generated Trailer'}
-                                        </h3>
-                                        <div className="text-[10px] text-white/50 uppercase tracking-widest font-bold flex items-center gap-1.5 mt-1">
-                                            <Calendar size={10} />
-                                            {new Date(edit.createdAt).toLocaleDateString()}
+                                        
+                                        <div className="px-5 py-4 relative z-10 w-full">
+                                            <h3 className="text-sm font-black text-white truncate drop-shadow-md">
+                                                {edit.name || 'Generated Trailer'}
+                                            </h3>
+                                            <div className="text-[10px] text-white/50 uppercase tracking-widest font-bold flex items-center gap-1.5 mt-1">
+                                                <Calendar size={10} />
+                                                {new Date(edit.createdAt).toLocaleDateString()}
+                                            </div>
                                         </div>
                                     </div>
 

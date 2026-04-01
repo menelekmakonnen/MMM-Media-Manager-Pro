@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle, Maximize, Minimize, Film } from 'lucide-react';
+import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle, Maximize, Minimize, Film, Wand2, MonitorPlay } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
 import { clearThumbnailCache } from '../../utils/thumbnailCache';
 import { openDirectory } from '../../utils/fileSystem';
@@ -15,8 +15,11 @@ const TopBar = () => {
         currentFolder, isScanning, startScan, cancelScan, setFolderHandle, setCurrentFolder,
         explorerSearchQuery, setExplorerSearchQuery,
         appViewMode, setAppViewMode, setGlobalViewMode, theme,
-        mediaFitMode, toggleMediaFitMode
+        mediaFitMode, toggleMediaFitMode,
+        trailerDraftSequence, trailerUnsavedPromptEnabled, clearTrailerDraftSequence
     } = useMediaStore();
+    
+    const [showTrailerWarning, setShowTrailerWarning] = useState(false);
 
     useEffect(() => {
         // slight delay to allow CSS vars to update in DOM
@@ -44,23 +47,28 @@ const TopBar = () => {
         }
     }, []);
 
-    const handleOpenFolder = async () => {
-        console.log('[TopBar] Open button clicked.');
+    const executeFolderOpen = async () => {
         try {
-            console.log('[TopBar] Requesting directory...');
             const handle = await openDirectory();
-            console.log('[TopBar] Handle received:', handle);
             if (handle) {
                 setFolderHandle(handle);
                 setCurrentFolder('/' + handle.name);
                 saveFolderHandle(handle);
-                console.log('[TopBar] Starting scan...', handle.name);
                 startScan(handle);
-            } else {
-                console.warn('[TopBar] No handle returned (cancelled?)');
+                if (trailerDraftSequence && trailerDraftSequence.length > 0) {
+                    clearTrailerDraftSequence();
+                }
             }
         } catch (error) {
             console.error('[TopBar] Error opening folder:', error);
+        }
+    };
+
+    const handleOpenFolder = () => {
+        if (trailerDraftSequence && trailerDraftSequence.length > 0 && trailerUnsavedPromptEnabled) {
+            setShowTrailerWarning(true);
+        } else {
+            executeFolderOpen();
         }
     };
     const handleAddFolder = async () => {
@@ -74,6 +82,37 @@ const TopBar = () => {
 
     return (
         <div className="h-12 w-full glass-panel border-b border-[var(--glass-border)] flex items-center justify-between pl-4 pr-0 z-50 select-none" style={{ WebkitAppRegion: 'drag' }}>
+            {/* Safety Modal overlay for Trailer */}
+            {showTrailerWarning && (
+                <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="max-w-md w-full bg-[#11111a] border border-red-500/20 shadow-[0_0_100px_rgba(239,68,68,0.2)] rounded-2xl p-6 text-center">
+                        <div className="w-16 h-16 mx-auto bg-red-500/10 text-red-500 flex items-center justify-center rounded-full mb-4 outline outline-red-500/20">
+                            <Trash2 size={32} />
+                        </div>
+                        <h2 className="text-xl font-black text-white mb-2 tracking-tight">Discard Unsaved Trailer?</h2>
+                        <p className="text-sm text-white/50 mb-6 font-medium leading-relaxed">
+                            Opening a new library will completely wipe your current unsaved Trailer Draft. Are you sure you wish to proceed? You can save it as an Edit first via the Trailer menu.
+                        </p>
+                        <div className="flex gap-3 mt-4">
+                            <button 
+                                onClick={() => setShowTrailerWarning(false)}
+                                className="flex-1 py-3 px-4 rounded-xl font-bold bg-white/5 hover:bg-white/10 text-white transition-all shadow border border-white/5 hover:border-white/20 active-press"
+                            >
+                                CANCEL
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setShowTrailerWarning(false);
+                                    executeFolderOpen();
+                                }}
+                                className="flex-1 py-3 px-4 rounded-xl font-bold bg-red-500 hover:bg-red-400 text-white transition-all shadow-[0_0_15px_rgba(239,68,68,0.5)] active-[0.98]"
+                            >
+                                DISCARD IT
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* Left: Branding & Breadcrumbs */}
             <div
                 className="flex items-center justify-between px-3 py-2 bg-[#0F1115] border-b border-white/5 select-none"
@@ -86,7 +125,7 @@ const TopBar = () => {
                     <button
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                         onClick={() => {
-                            const modes = ['standard', 'slideshow', 'gallery', 'editor', 'settings'];
+                            const modes = ['standard', 'stream', 'slideshow', 'gallery', 'editor', 'settings'];
                             const next = modes[(modes.indexOf(appViewMode) + 1) % modes.length];
                             setAppViewMode(next);
                         }}
@@ -102,51 +141,24 @@ const TopBar = () => {
                     </button>
                 </div>
 
-                {/* Center: Search & Navigation */}
                 <div className="flex-1 max-w-2xl px-8 flex items-center gap-3">
                     {/* Spacer */}
                     <div className="flex-1" />
-                    {/* Breadcrumbs (Condensed) */}
-                    <div className="hidden xl:flex items-center gap-1 text-xs text-[var(--text-secondary)] overflow-hidden" style={{ WebkitAppRegion: 'no-drag' }}>
-                        <span
-                            className="hover:text-white cursor-pointer transition-colors shrink-0 font-medium"
-                            onClick={() => {
-                                // "Library" could reset to root or clear search? 
-                                // For now, maybe just clear search if already at root, or do nothing?
-                                setExplorerSearchQuery('');
-                            }}
-                        >
-                            Library
-                        </span>
-                        {pathParts.slice(-3).map((part, i, arr) => {
-                            // Calculate original index in pathParts
-                            // If showing last 3, then arr length is up to 3.
-                            // The true index in pathParts is: (pathParts.length - arr.length) + i
-                            const trueIndex = (pathParts.length - arr.length) + i;
-
-                            return (
-                                <React.Fragment key={i}>
-                                    <ChevronRight size={10} className="text-[var(--text-dim)] shrink-0" />
-                                    <span
-                                        className="hover:text-white cursor-pointer transition-colors truncate max-w-[150px] shrink-0 font-medium"
-                                        onClick={() => {
-                                            const newPath = '/' + pathParts.slice(0, trueIndex + 1).join('/');
-                                            console.log('[TopBar] Navigating to:', newPath);
-                                            setCurrentFolder(newPath); // This updates activeFolders and triggers updateProcessedFiles
-                                            setExplorerSearchQuery('');
-                                        }}
-                                        title={`Go to ${part}`}
-                                    >
-                                        {part}
-                                    </span>
-                                </React.Fragment>
-                            );
-                        })}
-                    </div>
                 </div>
 
                 {/* View Switcher (Center-Right) */}
                 <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5 mx-4" style={{ WebkitAppRegion: 'no-drag' }}>
+                    <button
+                        onClick={() => setAppViewMode('stream')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all flex-shrink-0",
+                            appViewMode === 'stream' ? "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Cinematic Stream View"
+                    >
+                        <MonitorPlay size={14} />
+                        <span className="hidden xl:inline">Stream</span>
+                    </button>
                     <button
                         onClick={() => setAppViewMode('standard')}
                         className={clsx(
@@ -179,6 +191,17 @@ const TopBar = () => {
                     >
                         <ImageIcon size={14} />
                         <span className="hidden xl:inline">Gallery</span>
+                    </button>
+                    <button
+                        onClick={() => setAppViewMode('trailer')}
+                        className={clsx(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
+                            appViewMode === 'trailer' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
+                        )}
+                        title="Trailer Generator"
+                    >
+                        <Wand2 size={14} />
+                        <span className="hidden xl:inline">Trailer</span>
                     </button>
                     <button
                         onClick={() => setAppViewMode('editor')}
@@ -250,9 +273,6 @@ const TopBar = () => {
                         <RefreshCw size={8} className="absolute -bottom-1 -right-1 group-hover:rotate-180 transition-transform duration-500" />
                     </div>
                 </button>
-
-                {/* Custom Window Controls */}
-                <WindowControls />
             </div>
         </div>
     );

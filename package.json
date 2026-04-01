@@ -2,7 +2,7 @@
   "name": "mmmedia-darkroom",
   "private": true,
   "version": "2.0.0",
-  "description": "Complete Product Specification - Professional Media Management",
+  "description": "MMMedia Darkroom",
   "author": "Menelek Makonnen",
   "type": "module",
   "main": "electron/main.cjs",
@@ -28,6 +28,22 @@
       "public/icon.png"
     ],
     "icon": "public/icon.png",
+    "fileAssociations": [
+      {
+        "ext": ["mp4", "mkv", "avi", "mov", "webm", "wmv", "flv", "m4v", "mpg", "mpeg", "3gp", "ts"],
+        "name": "Video File",
+        "description": "Video file playable in MMMedia Darkroom",
+        "role": "Viewer",
+        "icon": "public/icon.png"
+      },
+      {
+        "ext": ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "svg", "avif"],
+        "name": "Image File",
+        "description": "Image file viewable in MMMedia Darkroom",
+        "role": "Viewer",
+        "icon": "public/icon.png"
+      }
+    ],
     "win": {
       "forceCodeSigning": false,
       "verifyUpdateCodeSignature": false,
@@ -41,6 +57,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

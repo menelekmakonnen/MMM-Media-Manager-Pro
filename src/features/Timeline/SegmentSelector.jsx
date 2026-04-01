@@ -14,11 +14,10 @@ const SegmentSelector = ({ clipId, onScrub }) => {
   const [isZoomed, setIsZoomed] = useState(false);
   const [isDurationLocked, setIsDurationLocked] = useState(false);
   const fps = settings.fps;
-  if (!clip) return null;
   const isSelected = selectedSegment?.clipId === clipId;
-  const segmentStart = isSelected ? selectedSegment.startFrame : clip.trimStartFrame ?? 0;
-  const segmentEnd = isSelected ? selectedSegment.endFrame : clip.trimEndFrame ?? (clip.sourceDurationFrames || 0);
-  const sourceDuration = clip.sourceDurationFrames || 1;
+  const segmentStart = clip ? (isSelected ? selectedSegment.startFrame : clip.trimStartFrame ?? 0) : 0;
+  const segmentEnd = clip ? (isSelected ? selectedSegment.endFrame : clip.trimEndFrame ?? (clip.sourceDurationFrames || 0)) : 0;
+  const sourceDuration = clip ? (clip.sourceDurationFrames || 1) : 1;
   const segmentDuration = segmentEnd - segmentStart;
   const zoomMargin = Math.max(fps * 2, segmentDuration);
   let viewStart = isZoomed ? Math.max(0, segmentStart - zoomMargin) : 0;
@@ -115,6 +114,9 @@ const SegmentSelector = ({ clipId, onScrub }) => {
     const newStart = Math.min(maxStart, segmentStart + segmentDuration);
     updateClipSource(clipId, newStart, newStart + segmentDuration);
   };
+  
+  if (!clip) return null;
+
   return /* @__PURE__ */ React.createElement("div", { className: "px-3 py-2 bg-surface-dark/30 border-t border-white/5" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ React.createElement("span", { className: "text-xs text-white/40 flex items-center gap-2" }, "Source Range", /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-1 bg-black/20 rounded border border-white/5 px-1 py-0.5" }, /* @__PURE__ */ React.createElement("button", { onClick: shiftSegmentBackward, title: "Shift segment backward by duration", className: "hover:bg-white/10 rounded p-0.5 text-white/50 hover:text-white" }, /* @__PURE__ */ React.createElement(ChevronLeft, { size: 12 })), /* @__PURE__ */ React.createElement("button", { onClick: shiftSegmentForward, title: "Shift segment forward by duration", className: "hover:bg-white/10 rounded p-0.5 text-white/50 hover:text-white" }, /* @__PURE__ */ React.createElement(ChevronRight, { size: 12 })), /* @__PURE__ */ React.createElement("div", { className: "w-px h-3 bg-white/10 mx-0.5" }), /* @__PURE__ */ React.createElement(
     "button",
     {

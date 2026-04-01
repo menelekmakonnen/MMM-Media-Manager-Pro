@@ -7,15 +7,17 @@ import RightSidebar from './RightSidebar';
 import FullGridView from './FullGridView';
 import FolderExplorer from './FolderExplorer';
 import TopBar from './TopBar';
+import TitleBar from './TitleBar';
 import useMediaStore from '../../stores/useMediaStore';
 import GalleryView from './Views/GalleryView';
 import SlideshowView from './Views/SlideshowView';
 import EditorView from './Views/EditorView';
 import SettingsView from './Views/SettingsView';
+import StreamView from '../Stream/StreamView';
 import { updateAppIcons } from '../../utils/LogoGenerator';
 import { useKeyboardBindings } from '../../hooks/useKeyboardBindings';
 import TrailerModal from '../Trailer/TrailerModal';
-import { TrailerView } from '../Trailer/TrailerView';
+import TrailerRouter from '../Trailer/TrailerRouter';
 
 const ResizeHandleVertical = () => (
     <PanelResizeHandle className="w-1 hover:w-1.5 bg-transparent hover:bg-[var(--accent-glow)] transition-all duration-300 flex flex-col justify-center items-center outline-none z-50 group">
@@ -34,7 +36,8 @@ const MainContentPanel = () => {
 
     if (appViewMode === 'gallery') return <GalleryView />;
     if (appViewMode === 'settings') return <SettingsView />;
-    if (appViewMode === 'trailerView') return <TrailerView />;
+    if (appViewMode === 'trailer') return <TrailerRouter />;
+    if (appViewMode === 'stream') return <StreamView />;
 
     if (globalViewMode === 'fullGrid') return <FullGridView />;
     if (globalViewMode === 'folderGrid') return <FolderExplorer />;
@@ -81,11 +84,14 @@ const MainLayout = () => {
     // SLIDESHOW VIEW (Highest Priority)
     if (appViewMode === 'slideshow') {
         return (
-            <div className="h-full w-full bg-black relative">
-                <div className={`absolute top-0 left-0 right-0 z-[60] transition-opacity duration-300 ${slideshowIdle ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
-                    <TopBar />
+            <div className="h-full w-full flex flex-col bg-black relative">
+                <TitleBar />
+                <div className="flex-1 relative overflow-hidden">
+                    <div className={`absolute top-0 left-0 right-0 z-[60] transition-opacity duration-300 ${slideshowIdle ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
+                        <TopBar />
+                    </div>
+                    <SlideshowView />
                 </div>
-                <SlideshowView />
             </div>
         );
     }
@@ -93,11 +99,14 @@ const MainLayout = () => {
     // FULLSCREEN or MOVIE MODE: Immersive viewing (Standard Grid)
     if (fullscreenMode || (movieMode && slideshowActive)) {
         return (
-            <div className="h-full w-full bg-black relative group">
-                <CenterView />
-                {/* Minimal Overlay for Movie Mode when active */}
-                <div className="absolute top-0 inset-x-0 h-1 z-50 hover:h-12 transition-all opacity-0 hover:opacity-100 bg-gradient-to-b from-black/80 to-transparent flex items-center px-4 overflow-hidden">
-                    <button onClick={toggleMovieMode} className="text-[var(--text-secondary)] hover:text-white text-xs font-bold uppercase tracking-widest">Exit Movie Mode [M]</button>
+            <div className="h-full w-full flex flex-col bg-black relative group">
+                <TitleBar />
+                <div className="flex-1 relative overflow-hidden">
+                    <CenterView />
+                    {/* Minimal Overlay for Movie Mode when active */}
+                    <div className="absolute top-0 inset-x-0 h-1 z-50 hover:h-12 transition-all opacity-0 hover:opacity-100 bg-gradient-to-b from-black/80 to-transparent flex items-center px-4 overflow-hidden">
+                        <button onClick={toggleMovieMode} className="text-[var(--text-secondary)] hover:text-white text-xs font-bold uppercase tracking-widest">Exit Movie Mode [M]</button>
+                    </div>
                 </div>
             </div>
         );
@@ -105,6 +114,7 @@ const MainLayout = () => {
 
     return (
         <div className="h-full w-full flex flex-col overflow-hidden bg-transparent text-[var(--text-primary)] font-sans relative">
+            <TitleBar />
             {/* 1. Top Bar (Hidable in Movie Mode) */}
             {!movieMode && <TopBar />}
 
@@ -116,7 +126,7 @@ const MainLayout = () => {
                     <Panel minSize={movieMode ? 100 : 50}>
                         <PanelGroup direction="horizontal">
                             {/* Left Sidebar */}
-                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && appViewMode !== 'trailerView' && (
+                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && appViewMode !== 'trailer' && appViewMode !== 'stream' && (
                                 <>
                                     <Panel defaultSize={18} minSize={15} maxSize={25} collapsible={true} className="z-10">
                                         <LeftSidebar />
@@ -135,7 +145,7 @@ const MainLayout = () => {
                             </Panel>
 
                             {/* Right Sidebar (Optional) */}
-                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && appViewMode !== 'trailerView' && (
+                            {!movieMode && !cinemaMode && appViewMode !== 'gallery' && appViewMode !== 'editor' && appViewMode !== 'settings' && appViewMode !== 'trailer' && appViewMode !== 'stream' && (
                                 <>
                                     <ResizeHandleVertical />
                                     <Panel defaultSize={12} minSize={8} maxSize={18} collapsible={true} className="z-10">
@@ -212,7 +222,7 @@ const MainLayout = () => {
                                 if (store.explorerSelectedFiles.size === 0) {
                                     store.setExplorerSelectedFiles(new Set([mediaContextMenu.file.path]));
                                 }
-                                store.setTrailerModalOpen(true);
+                                store.setAppViewMode('trailer');
                                 setMediaContextMenu(null);
                             }}
                         >

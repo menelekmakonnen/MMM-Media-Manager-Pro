@@ -1,5 +1,5 @@
 const LOW_PASS_FREQUENCY = 150;
-const analyzeAudio = async (audioBuffer) => {
+const analyzeAudio = async (audioBuffer, sensitivity = 0.5) => {
   const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
   const source = offlineContext.createBufferSource();
   source.buffer = audioBuffer;
@@ -12,8 +12,12 @@ const analyzeAudio = async (audioBuffer) => {
   const renderedBuffer = await offlineContext.startRendering();
   const data = renderedBuffer.getChannelData(0);
   const peaks = [];
-  const threshold = 0.3;
-  const minDistance = 0.25;
+  
+  // 0.0 = Strict (few peaks), 1.0 = Highly Sensitive (many peaks)
+  const mappedSensitivity = Math.max(0, Math.min(1, sensitivity));
+  const threshold = 0.4 - (mappedSensitivity * 0.35); // 0.0 -> 0.4, 1.0 -> 0.05
+  const minDistance = 0.4 - (mappedSensitivity * 0.3); // 0.0 -> 0.4, 1.0 -> 0.1
+
   const windowSize = Math.floor(0.05 * audioBuffer.sampleRate);
   for (let i = 0; i < data.length - windowSize; i += windowSize) {
     let sum = 0;

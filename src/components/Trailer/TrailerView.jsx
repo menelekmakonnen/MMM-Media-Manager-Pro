@@ -5,23 +5,23 @@ import { useClipStore } from '../../stores/clipStore';
 import { useViewStore } from '../../stores/editorViewStore';
 import { generateTrailerSequence, extractBeatTimestamps } from '../../utils/editorUtils/trailerGenerator';
 import { DEFAULT_FPS } from '../../utils/editorUtils/time';
-import { Wand2, RefreshCw, Settings2, Film, Play, Pause, ChevronLeft, Volume2, VolumeX, Maximize, Minimize, Square, Shuffle, Dna } from 'lucide-react';
+import { Wand2, RefreshCw, Settings2, Film, Play, Pause, ChevronLeft, Volume2, VolumeX, Maximize, Minimize, Square, Shuffle, Dna, ArrowLeft, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { v4 as uuidv4 } from 'uuid';
 
 export const TrailerView = () => {
     // Stores
     const { 
-        setAppViewMode, previousViewMode, setTrailerModalOpen, trailerSettings,
+        setAppViewMode, setTrailerModalOpen, trailerSettings,
         explorerSelectedFiles, getSortedFiles, files,
-        masterVolume, setMasterVolume
+        masterVolume, setMasterVolume,
+        trailerDraftSequence: draftSequence, setTrailerDraftSequence: setDraftSequence, clearTrailerDraftSequence
     } = useMediaStore();
     const { addEdit } = useProjectStore();
     const { setClips, nukeLibrary } = useClipStore();
     const { setActiveTab } = useViewStore();
 
     // Core state
-    const [draftSequence, setDraftSequence] = useState([]);
     const [currentClipIndex, setCurrentClipIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     const [isGenerating, setIsGenerating] = useState(true);
@@ -136,7 +136,7 @@ export const TrailerView = () => {
     };
 
     useEffect(() => {
-        if (draftSequence.length === 0) generateDraft();
+        if (!draftSequence || draftSequence.length === 0) generateDraft();
     }, [trailerSettings]);
 
     // Stable URL Cache Architecture
@@ -452,6 +452,7 @@ export const TrailerView = () => {
 
     // Export Logic
     const handleSaveToEditor = () => {
+        // eslint-disable-next-line no-unused-vars
         const cleanSequence = draftSequence.map(({ globalStart, globalEnd, localDuration, ...clip }) => clip);
         const editId = uuidv4();
 
@@ -520,12 +521,15 @@ export const TrailerView = () => {
         }
 
         const allClips = [...cleanSequence, ...audioTracks];
+        
+        const thumbnailPath = allClips.find(c => c.path)?.path || null;
 
         addEdit({
             id: editId,
             name: `Trailer - ${new Date().toLocaleTimeString()}`,
             clips: allClips,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            thumbnailPath // Include thumbnail for EditsTab UI
         });
         
         nukeLibrary();
@@ -533,6 +537,7 @@ export const TrailerView = () => {
         setActiveTab('edits');
         if (document.fullscreenElement) document.exitFullscreen();
         setAppViewMode('editor');
+        clearTrailerDraftSequence(); // Purge the generator draft to finalize handover
     };
 
     return (
@@ -540,12 +545,20 @@ export const TrailerView = () => {
             
             {/* Top Navigation */}
             <div className={clsx("absolute top-0 inset-x-0 p-6 z-50 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between transition-opacity duration-300", isPlaying ? "opacity-0 group-hover:opacity-100" : "opacity-100")}>
-                <button 
-                    onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); setAppViewMode(previousViewMode || 'standard'); }}
-                    className="flex items-center gap-2 text-white/60 hover:text-white font-bold uppercase tracking-wider text-xs transition-colors bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md"
-                >
-                    <ChevronLeft size={16} /> Close Trailer
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); setAppViewMode('standard'); }}
+                        className="flex items-center gap-2 border border-white/20 hover:border-white/50 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs transition-colors px-4 py-2 rounded-lg backdrop-blur-md"
+                    >
+                        <ArrowLeft size={16} /> Back to Library
+                    </button>
+                    <button 
+                        onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); clearTrailerDraftSequence(); }}
+                        className="flex items-center gap-2 border border-red-500/30 hover:border-red-500/80 bg-red-500/10 hover:bg-red-500/20 text-red-100 font-bold uppercase tracking-wider text-xs transition-colors px-4 py-2 rounded-lg backdrop-blur-md"
+                    >
+                        <Trash2 size={16} /> Discard
+                    </button>
+                </div>
 
                 <div className="flex gap-2">
                     <button onClick={() => { setIsPlaying(false); setTrailerModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-all">

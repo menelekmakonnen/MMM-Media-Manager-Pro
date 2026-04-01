@@ -20,7 +20,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
     // Explicit log channel
-    log: (level, message) => ipcRenderer.send('ipc-log', { level, message })
+    log: (level, message) => ipcRenderer.send('ipc-log', { level, message }),
+
+    // ─── File Open Handling ─────────────────────────────────────────
+    // Listen for files opened via Windows "Open with" context menu
+    onFileOpened: (callback) => {
+        const listener = (_event, filePath) => callback(filePath);
+        ipcRenderer.on('open-file', listener);
+        return () => ipcRenderer.removeListener('open-file', listener);
+    },
+    // Get any file that was passed on initial launch
+    getOpenedFile: () => ipcRenderer.invoke('get-opened-file'),
+    // Read an external file by absolute path (returns { name, path, size, mimeType, buffer })
+    readExternalFile: (filePath) => ipcRenderer.invoke('read-external-file', filePath)
 });
 
 contextBridge.exposeInMainWorld('ipcRenderer', {
