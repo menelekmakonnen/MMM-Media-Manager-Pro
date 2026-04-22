@@ -20,67 +20,159 @@ function getSortKey(name) {
 }
 
 /**
+ * Build a synthetic file entry from metadata returned by `read-folder-media`.
+ * These entries use `_externalPath` for the renderer to create blob URLs on demand.
+ */
+function buildSyntheticEntry(meta) {
+    const type = getFileType(meta.name);
+    return {
+        id: 'ext-' + Math.random().toString(36).substr(2, 9),
+        name: meta.name,
+        sortKey: getSortKey(meta.name),
+        kind: 'file',
+        handle: null,
+        path: meta.path,
+        folderPath: meta.folderPath,
+        type,
+        size: meta.size,
+        lastModified: meta.lastModified,
+        _externalPath: meta.path // Renderer uses this to read via IPC on demand
+    };
+}
+
+/**
  * Handle a file path received from the main process.
- * Reads the file via IPC, creates a blob URL, and injects it into the store
- * as a synthetic file entry so the user sees it immediately.
+ * Scans the parent folder for all media siblings, injects them into the store,
+ * and opens the target file in Slideshow view.
  */
 async function handleExternalFile(filePath) {
-    if (!filePath || !window.electronAPI?.readExternalFile) return;
+    if (!filePath || !window.electronAPI) return;
 
     console.log('[ExternalFileHandler] Opening external file:', filePath);
 
     try {
-        const fileData = await window.electronAPI.readExternalFile(filePath);
-        if (!fileData) {
-            console.error('[ExternalFileHandler] Failed to read file:', filePath);
+        const api = window.electronAPI;
+
+        // Extract folder path from the file path
+        const pathParts = filePath.replace(/\\/g, '/').split('/');
+        const fileName = pathParts.pop();
+        const folderPath = pathParts.join('/').replace(/\//g, '\\');
+
+        // 1. Scan the entire parent folder for sibling media files
+        let siblingFiles = [];
+        if (api.readFolderMedia) {
+            siblingFiles = await api.readFolderMedia(folderPath);
+        }
+
+        // Fallback: if folder scan fails or returns nothing, read just the single file
+        if (!siblingFiles || siblingFiles.length === 0) {
+            const fileData = await api.readExternalFile(filePath);
+            if (!fileData) {
+                console.error('[ExternalFileHandler] Failed to read file:', filePath);
+                return;
+            }
+            const blob = new Blob([fileData.buffer], { type: fileData.mimeType });
+            const blobUrl = URL.createObjectURL(blob);
+            const type = getFileType(fileData.name);
+
+            const syntheticFile = {
+                id: 'ext-' + Math.random().toString(36).substr(2, 9),
+                name: fileData.name,
+                sortKey: getSortKey(fileData.name),
+                kind: 'file',
+                handle: null,
+                path: fileData.path,
+                folderPath: fileData.folderPath,
+                type,
+                size: fileData.size,
+                lastModified: fileData.lastModified,
+                _externalBlobUrl: blobUrl
+            };
+
+            const store = useMediaStore.getState();
+            store.clearFiles();
+            store.setFolders([{
+                name: fileData.folderPath.split(/[\\/]/).pop() || 'External',
+                path: fileData.folderPath,
+                sortKey: getSortKey(fileData.folderPath.split(/[\\/]/).pop() || 'external'),
+                fileCount: 1,
+                hasGifs: type === 'gif',
+                hasVideos: type === 'video',
+                hasImages: type === 'image',
+                lastModified: fileData.lastModified,
+                createdAt: Date.now()
+            }]);
+            store.addFiles([syntheticFile]);
+            store.setCurrentFolder(fileData.folderPath);
+            useMediaStore.setState({
+                currentFileIndex: 0,
+                appViewMode: 'slideshow',
+                slideshowActive: true,
+                fileTypeFilter: ['all'],
+                globalIsPlaying: true
+            });
+            store.updateProcessedFiles(true);
+            console.log('[ExternalFileHandler] Single file loaded, opening in Slideshow.');
             return;
         }
 
-        // Create a Blob from the buffer
-        const blob = new Blob([fileData.buffer], { type: fileData.mimeType });
-        const blobUrl = URL.createObjectURL(blob);
+        // 2. Build synthetic entries for all sibling files
+        const allFiles = siblingFiles.map(buildSyntheticEntry);
 
-        // Build a synthetic file object matching the app's expected shape
-        const type = getFileType(fileData.name);
-        const syntheticFile = {
-            id: 'ext-' + Math.random().toString(36).substr(2, 9),
-            name: fileData.name,
-            sortKey: getSortKey(fileData.name),
-            kind: 'file',
-            handle: null, // No handle for external files
-            path: fileData.path,
-            folderPath: fileData.folderPath,
-            type,
-            size: fileData.size,
-            lastModified: fileData.lastModified,
-            // Stash the blob URL so MediaItem can use it directly
-            _externalBlobUrl: blobUrl
-        };
+        // 3. Find the index of the target file
+        // Normalize path separators for comparison
+        const normalizedTarget = filePath.replace(/\//g, '\\');
+        let targetIndex = allFiles.findIndex(f => f.path.replace(/\//g, '\\') === normalizedTarget);
+        if (targetIndex < 0) targetIndex = 0;
 
-        const store = useMediaStore.getState();
+        // 4. Read the target file to create an immediate blob URL (for instant display)
+        const targetFile = allFiles[targetIndex];
+        if (targetFile && api.readExternalFile) {
+            try {
+                const fileData = await api.readExternalFile(targetFile.path);
+                if (fileData) {
+                    const blob = new Blob([fileData.buffer], { type: fileData.mimeType });
+                    targetFile._externalBlobUrl = URL.createObjectURL(blob);
+                }
+            } catch (_) { /* Non-critical: file will load on demand */ }
+        }
 
-        // Create a synthetic folder entry
+        // 5. Build folder metadata
+        const folderName = folderPath.split(/[\\/]/).pop() || 'External';
+        const hasVideos = allFiles.some(f => f.type === 'video');
+        const hasImages = allFiles.some(f => f.type === 'image');
+        const hasGifs = allFiles.some(f => f.type === 'gif');
+
         const folderEntry = {
-            name: fileData.folderPath.split(/[\\/]/).pop() || 'External',
-            path: fileData.folderPath,
-            sortKey: getSortKey(fileData.folderPath.split(/[\\/]/).pop() || 'external'),
-            fileCount: 1,
-            hasGifs: type === 'gif',
-            hasVideos: type === 'video',
-            hasImages: type === 'image',
-            lastModified: fileData.lastModified,
+            name: folderName,
+            path: folderPath,
+            sortKey: getSortKey(folderName),
+            fileCount: allFiles.length,
+            hasGifs,
+            hasVideos,
+            hasImages,
+            lastModified: Math.max(...allFiles.map(f => f.lastModified || 0)),
             createdAt: Date.now()
         };
 
-        // Clear current state and inject the external file
+        // 6. Inject into store and switch to Slideshow view
+        const store = useMediaStore.getState();
         store.clearFiles();
         store.setFolders([folderEntry]);
-        store.addFiles([syntheticFile]);
-        store.setCurrentFolder(fileData.folderPath);
-        useMediaStore.setState({ currentFileIndex: 0, appViewMode: 'standard' });
+        store.addFiles(allFiles);
+        store.setCurrentFolder(folderPath);
+        useMediaStore.setState({
+            currentFileIndex: targetIndex,
+            appViewMode: 'slideshow',
+            slideshowActive: true,
+            fileTypeFilter: ['all'], // Show all types so nothing gets filtered
+            globalIsPlaying: true,
+            gridColumns: 1,
+            gridRows: 1
+        });
         store.updateProcessedFiles(true);
 
-        console.log('[ExternalFileHandler] File loaded successfully:', fileData.name);
+        console.log(`[ExternalFileHandler] Loaded ${allFiles.length} sibling files, target at index ${targetIndex}. Opening in Slideshow.`);
     } catch (err) {
         console.error('[ExternalFileHandler] Error handling external file:', err);
     }

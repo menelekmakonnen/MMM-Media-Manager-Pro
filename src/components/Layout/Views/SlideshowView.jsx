@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import VideoPlayer from '../../VideoPlayer';
 import SlideshowOverlay from '../SlideshowOverlay';
 import ControlPanel from '../ControlPanel';
-import { ZoomIn, ZoomOut, RotateCw, RefreshCw, EyeOff } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCw, RefreshCw, EyeOff, Volume2, VolumeX } from 'lucide-react';
 import { VideoRegistryContext } from '../../../contexts/VideoRegistryContext.js';
 import { getMediaUrl } from '../../../utils/mediaUrl';
 
@@ -43,6 +43,7 @@ const SlideshowView = () => {
         slideshowActive, slideshowDuration, slideshowTransition,
         slideshowRandom, triggerRandomStart,
         masterVolume, isMasterMuted, masterPlaybackRate,
+        setMasterVolume, setIsMasterMuted,
         setAppViewMode, previousViewMode,
         slideshowIdle,
         gridColumns, gridRows,
@@ -86,8 +87,6 @@ const SlideshowView = () => {
 
     // Continuous Flow: Calculate visible files as a rolling window
     // [0, 1, 2] -> [1, 2, 3] -> [2, 3, 4]
-    // Continuous Flow: Calculate visible files as a rolling window
-    // [0, 1, 2] -> [1, 2, 3] -> [2, 3, 4]
     const visibleFiles = useMemo(() => {
         if (!files || files.length === 0) return [];
         const pageFiles = [];
@@ -114,7 +113,6 @@ const SlideshowView = () => {
 
     useEffect(() => {
         advanceRef.current = () => {
-            // console.log('[Slideshow] Auto-Advance Triggered');
             useMediaStore.getState().nextFile();
         };
     });
@@ -153,6 +151,16 @@ const SlideshowView = () => {
         };
     }, []);
 
+    // === Mouse wheel volume HUD (must be before early return) ===
+    const [volumeHudVisible, setVolumeHudVisible] = useState(false);
+    const volumeHudTimeoutRef = useRef(null);
+
+    const showVolumeHud = useCallback(() => {
+        setVolumeHudVisible(true);
+        if (volumeHudTimeoutRef.current) clearTimeout(volumeHudTimeoutRef.current);
+        volumeHudTimeoutRef.current = setTimeout(() => setVolumeHudVisible(false), 1200);
+    }, []);
+
     if (!files || files.length === 0) return <div className="h-full w-full bg-black flex items-center justify-center text-white/20">No media</div>;
 
     // Transition for Layout Animations
@@ -174,12 +182,48 @@ const SlideshowView = () => {
         <VideoRegistryContext.Provider value={registryContextValue}>
             <div className="h-full w-full bg-black relative overflow-hidden group">
 
-                {/* Grid Container */}
+                {/* Floating Volume HUD — Top Right Vertical Bar */}
+                <AnimatePresence>
+                    {volumeHudVisible && (
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            className="absolute top-6 right-6 z-[100] bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl px-3 py-4 flex flex-col items-center gap-3 shadow-2xl pointer-events-none"
+                        >
+                            {isMasterMuted || masterVolume === 0
+                                ? <VolumeX size={16} className="text-white/60" />
+                                : <Volume2 size={16} className="text-white/60" />
+                            }
+                            <div className="w-1.5 h-28 bg-white/10 rounded-full overflow-hidden flex flex-col-reverse">
+                                <div
+                                    className="w-full bg-[var(--accent-primary)] rounded-full transition-all duration-100 ease-out"
+                                    style={{ height: `${Math.round(masterVolume * 100)}%` }}
+                                />
+                            </div>
+                            <span className="text-white/80 text-[10px] font-mono font-bold">
+                                {Math.round(masterVolume * 100)}%
+                            </span>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Grid Container with wheel volume control */}
                 <div
                     className="absolute inset-0 p-4 grid gap-4 transition-all"
                     style={{
                         gridTemplateColumns: `repeat(${gridColumns || 1}, minmax(0, 1fr))`,
                         gridTemplateRows: `repeat(${gridRows || 1}, minmax(0, 1fr))`
+                    }}
+                    onWheel={(e) => {
+                        e.preventDefault();
+                        const delta = e.deltaY < 0 ? 0.01 : -0.01;
+                        const rawVol = masterVolume + delta;
+                        const newVol = Math.max(0, Math.min(1, Math.round(rawVol * 1000) / 1000));
+                        setMasterVolume(newVol);
+                        setIsMasterMuted(newVol <= 0);
+                        showVolumeHud();
                     }}
                 >
                     <AnimatePresence mode="popLayout" initial={false}>
@@ -243,6 +287,7 @@ const SlideshowView = () => {
 const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isActive, hideControls, forcePlay, slotIndex, mediaFitMode }) => {
     const isVideo = file.type === 'video';
     const [url, setUrl] = useState(null);
+    const [isHovering, setIsHovering] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -254,9 +299,24 @@ const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isAc
 
     if (!url) return <div className="w-full h-full flex items-center justify-center"><RefreshCw className="animate-spin text-white/20" /></div>;
 
+    // File info tooltip overlay
+    const InfoTooltip = () => (
+        <div className={clsx(
+            "absolute top-2 left-2 max-w-[80%] z-[60] bg-black/80 backdrop-blur-md rounded-lg px-3 py-2 border border-white/10 transition-all duration-200 pointer-events-none",
+            isHovering ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
+        )}>
+            <p className="text-[11px] font-bold text-white truncate">{file.name}</p>
+            <p className="text-[9px] text-white/50 truncate mt-0.5">{file.folderPath || file.path}</p>
+        </div>
+    );
+
     if (isVideo) {
         return (
-            <div className="w-full h-full flex items-center justify-center bg-black">
+            <div className="w-full h-full flex items-center justify-center bg-black relative"
+                 onMouseEnter={() => setIsHovering(true)}
+                 onMouseLeave={() => setIsHovering(false)}
+            >
+                <InfoTooltip />
                 <VideoPlayer
                     file={file}
                     fileUrl={url}
@@ -273,12 +333,18 @@ const SlideItem = ({ file, masterVolume, isMasterMuted, masterPlaybackRate, isAc
     }
 
     return (
-        <img
-            src={url}
-            alt={file.name}
-            className={clsx("w-full h-full transition-all duration-700", mediaFitMode === 'cover' ? 'object-cover' : 'object-contain')}
-            style={{ filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.5))' }}
-        />
+        <div className="w-full h-full relative"
+             onMouseEnter={() => setIsHovering(true)}
+             onMouseLeave={() => setIsHovering(false)}
+        >
+            <InfoTooltip />
+            <img
+                src={url}
+                alt={file.name}
+                className={clsx("w-full h-full transition-all duration-700", mediaFitMode === 'cover' ? 'object-cover' : 'object-contain')}
+                style={{ filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.5))' }}
+            />
+        </div>
     );
 };
 

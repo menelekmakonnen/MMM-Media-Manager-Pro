@@ -185,7 +185,7 @@ const StreamView = () => {
 
     if (!featuredVideo) {
         return (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0f] text-white gap-6">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-transparent text-white gap-6">
                 <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-4">
                     <MonitorPlay size={40} className="text-white/20" />
                 </div>
@@ -211,30 +211,22 @@ const StreamView = () => {
     const isHeroVertical = heroH > heroW;
 
     // Build Rows — use absolute orientation
-    let renderedRows = [];
-    if (streamLayoutMode === 'horizontal') {
-        renderedRows = categories.map((cat, i) => (
-            <StreamRow key={cat.id} title={cat.title} items={cat.items.filter(f => !f.isVertical)} isVertical={false} floatReverse={i % 2 !== 0} />
-        ));
-    } else if (streamLayoutMode === 'vertical') {
-        renderedRows = categories.map((cat, i) => (
-            <StreamRow key={cat.id} title={cat.title} items={cat.items.filter(f => f.isVertical)} isVertical={true} floatReverse={i % 2 !== 0} />
-        ));
-    } else {
-        // Mixed Mode
-        renderedRows = categories.map((cat, i) => {
-            const isBelt = (i + 1) % 3 === 0; 
-            const horizontalItems = cat.items.filter(f => !f.isVertical);
-            const verticalItems = cat.items.filter(f => f.isVertical);
-
-            if (isBelt && verticalItems.length > 0) {
-                return <StreamRow key={cat.id + '_vert'} title={`Shorts: ${cat.title}`} items={verticalItems} isVertical={true} floatReverse={i % 2 !== 0} />;
-            } else if (horizontalItems.length > 0) {
-                return <StreamRow key={cat.id + '_horz'} title={cat.title} items={horizontalItems} isVertical={false} floatReverse={i % 2 !== 0} />;
-            }
-            return null;
-        });
-    }
+    let renderedRows = categories.flatMap((cat, i) => {
+        const horizontalItems = cat.items.filter(f => !f.isVertical);
+        const verticalItems = cat.items.filter(f => f.isVertical);
+        
+        const rows = [];
+        
+        if (horizontalItems.length > 0) {
+            rows.push(<StreamRow key={cat.id + '_horz'} title={cat.title} items={horizontalItems} isVertical={false} floatReverse={i % 2 !== 0} />);
+        }
+        
+        if (verticalItems.length > 0) {
+            rows.push(<StreamRow key={cat.id + '_vert'} title={`${cat.title} (Vertical)`} items={verticalItems} isVertical={true} floatReverse={i % 2 === 0} />);
+        }
+        
+        return rows;
+    });
 
     return (
         <div className="w-full h-full bg-[#111] overflow-y-auto no-scrollbar relative font-sans select-none pb-24">

@@ -9,7 +9,7 @@ import {
     LayoutGrid, Grid3X3, Columns3, Grid2X2,
     RotateCw, ZoomIn, EyeOff, Film, ArrowLeftRight,
     Gauge, ArrowUp, ArrowDown, Pin, Star, X,
-    Monitor, Flame
+    Monitor, Flame, ChevronsDown, ChevronsUp, ChevronDown
 } from 'lucide-react';
 import VideoPlayer from '../VideoPlayer';
 import { VideoRegistryContext } from '../../contexts/VideoRegistryContext.js';
@@ -273,10 +273,11 @@ const MediaItem = ({
     );
 };
 // Original Standard View ControlPanel (matching the exe build layout)
+// Separate Play and Pause buttons, logarithmic volume, collapsible support
 const StandardControlPanel = ({
     onPlayAll, onPauseAll, onStopAll, onRandomizeAll, onSkipAll,
     masterVolume, setMasterVolume, isMasterMuted, setIsMasterMuted,
-    onRandomizeGrid, isPlaying
+    onRandomizeGrid, isPlaying, minimized = false
 }) => {
     const {
         gridColumns, gridRows,
@@ -291,6 +292,100 @@ const StandardControlPanel = ({
         cinemaMode, toggleCinemaMode
     } = useMediaStore();
 
+    // Logarithmic Volume: slider (0-200) -> volume (0-1) via x^3 curve for smooth low-end
+    const handleVolumeChange = (e) => {
+        const linearVal = parseInt(e.target.value) / 200;
+        const logVal = Math.pow(linearVal, 3); // x^3 curve for extra-smooth low end
+        setMasterVolume(logVal);
+        setIsMasterMuted(false);
+    };
+    const sliderValue = isMasterMuted ? 0 : Math.cbrt(masterVolume) * 200;
+
+    // Minimized (shrunk): ultra-compact single row
+    if (minimized === 'shrunk') {
+        return (
+            <div className="w-full glass-panel border-t border-white/10 flex items-center justify-center z-[70] shrink-0 px-3 py-1 gap-2 bg-black/80 backdrop-blur-md transition-all">
+                <button onClick={() => skipGroup(-1)} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Prev Group [F]"><SkipForward size={12} className="rotate-180" /></button>
+                <button onClick={prevFile} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Prev File"><ChevronLeft size={14} /></button>
+                <button onClick={onStopAll} className="p-1 text-red-500 hover:bg-red-500/20 rounded transition-all" title="Stop"><Square size={12} fill="currentColor" /></button>
+                <button onClick={onPauseAll} className={clsx("p-1.5 rounded-lg transition-all border", isPlaying ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30" : "bg-white/5 text-gray-400 border-white/5")} title="Pause"><Pause size={14} fill="currentColor" /></button>
+                <button onClick={onPlayAll} className={clsx("p-1.5 rounded-lg transition-all border", !isPlaying ? "bg-[var(--accent-primary)] text-black border-[var(--accent-primary)] shadow-[0_0_10px_rgba(59,130,246,0.4)]" : "bg-white/5 text-gray-400 border-white/5")} title="Play"><Play size={14} fill="currentColor" /></button>
+                <button onClick={nextFile} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Next File"><ChevronRight size={14} /></button>
+                <button onClick={() => skipGroup(1)} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Next Group [G]"><SkipForward size={12} /></button>
+                <div className="w-px h-4 bg-white/10 mx-1" />
+                <button onClick={() => setIsMasterMuted(!isMasterMuted)} className={clsx("p-1 transition-colors", isMasterMuted ? "text-gray-500" : "text-[var(--text-dim)]")}>
+                    {isMasterMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                </button>
+                <input type="range" min="0" max="200" value={sliderValue} onChange={handleVolumeChange}
+                    className="w-20 h-1 accent-[var(--accent-primary)] bg-white/10 rounded-full cursor-pointer" />
+            </div>
+        );
+    }
+
+    // Standard (NEW): compact two-row with inline speed + skip chips
+    if (minimized === 'standard') {
+        return (
+            <div className="w-full glass-panel border-t border-white/10 flex flex-col items-center z-[70] shrink-0 px-3 py-1.5 gap-1.5 bg-black/80 backdrop-blur-md transition-all">
+                {/* Row 1: Transport + Skip Chips + Tool Buttons */}
+                <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    {/* Left: Prev nav + backward skips */}
+                    <div className="flex items-center gap-0.5 bg-white/5 rounded-lg p-0.5">
+                        <button onClick={() => skipGroup(-1)} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Prev Group"><SkipForward size={12} className="rotate-180" /></button>
+                        <button onClick={prevFile} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Prev File"><ChevronLeft size={14} /></button>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                        <button onClick={() => onSkipAll(-30)} className="text-[9px] font-bold text-gray-500 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">-30s</button>
+                        <button onClick={() => onSkipAll(-5)} className="text-[9px] font-bold text-gray-500 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">-5s</button>
+                    </div>
+
+                    {/* Center: Core transport */}
+                    <div className="flex items-center gap-1">
+                        <button onClick={onRandomizeAll} className="p-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/20 transition-all active:scale-95" title="Random Start"><Shuffle size={14} /></button>
+                        <button onClick={toggleChaosMode} className={clsx("p-1.5 rounded-lg transition-all active:scale-95 border", isChaosMode ? "bg-orange-500/20 text-orange-500 border-orange-500/30" : "bg-white/5 text-gray-400 border-white/5")} title="Chaos Mode"><Flame size={14} fill={isChaosMode ? "currentColor" : "none"} /></button>
+                        <div className="w-px h-5 bg-white/10" />
+                        <button onClick={onStopAll} className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg border border-red-500/20 transition-all active:scale-95" title="Stop"><Square size={14} fill="currentColor" /></button>
+                        <button onClick={onPauseAll} className={clsx("p-2 rounded-xl transition-all active:scale-95 border", isPlaying ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30" : "bg-white/5 text-gray-400 border-white/5")} title="Pause"><Pause size={16} fill="currentColor" /></button>
+                        <div className="relative group/play">
+                            <button onClick={onPlayAll} className={clsx("relative p-2 rounded-xl transition-all active:scale-95 border", !isPlaying ? "bg-[var(--accent-primary)] text-black border-[var(--accent-primary)] shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/5 text-gray-400 border-white/5")} title="Play"><Play size={16} fill="currentColor" className="ml-0.5" /></button>
+                        </div>
+                        <div className="w-px h-5 bg-white/10" />
+                        <button onClick={onRandomizeGrid} className="p-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/20 transition-all active:scale-95" title="Randomize Grid"><RefreshCw size={14} /></button>
+                        <button onClick={() => setGlobalRotation(r => (r + 90) % 360)} className="p-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 rounded-lg border border-yellow-500/20 transition-all active:scale-95" title="Rotate"><RotateCw size={14} /></button>
+                        <button onClick={toggleMediaFitMode} className={clsx("p-1.5 rounded-lg transition-all active:scale-95 border", mediaFitMode === 'cover' ? "bg-amber-600 border-amber-500 text-white" : "bg-white/5 text-gray-400 border-white/5")} title="Fit/Cover"><Maximize size={14} /></button>
+                        <button onClick={toggleCinemaMode} className={clsx("p-1.5 rounded-lg transition-all active:scale-95 border", cinemaMode ? "bg-purple-500 text-white border-purple-500" : "bg-white/5 text-gray-400 border-white/5")} title="Cinema"><Monitor size={14} /></button>
+                    </div>
+
+                    {/* Right: forward skips + next nav */}
+                    <div className="flex items-center gap-0.5">
+                        <button onClick={() => onSkipAll(10)} className="text-[9px] font-bold text-gray-500 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">+10s</button>
+                        <button onClick={() => onSkipAll(120)} className="text-[9px] font-bold text-gray-500 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">+2m</button>
+                    </div>
+                    <div className="flex items-center gap-0.5 bg-white/5 rounded-lg p-0.5">
+                        <button onClick={nextFile} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Next File"><ChevronRight size={14} /></button>
+                        <button onClick={() => skipGroup(1)} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded transition-all" title="Next Group"><SkipForward size={12} /></button>
+                    </div>
+                </div>
+
+                {/* Row 2: Volume bar + Speed pill */}
+                <div className="flex items-center gap-3 w-full max-w-[500px]">
+                    <button onClick={() => setIsMasterMuted(!isMasterMuted)} className={clsx("p-0.5 transition-colors", isMasterMuted ? "text-gray-500" : "text-[var(--text-dim)] hover:text-white")}>
+                        {isMasterMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                    </button>
+                    <input type="range" min="0" max="200" value={sliderValue} onChange={handleVolumeChange}
+                        className="flex-1 h-1 accent-[var(--accent-primary)] bg-white/10 rounded-full cursor-pointer opacity-60 hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center bg-black/40 border border-white/10 rounded-full px-0.5 py-0.5 shadow-sm">
+                        <button onClick={() => { const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]; const i = speeds.indexOf(masterPlaybackRate); if (i > 0) setMasterPlaybackRate(speeds[i - 1]); }} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors" title="Slower"><ChevronLeft size={10} /></button>
+                        <div className="flex items-center gap-1 px-1.5 min-w-[40px] justify-center">
+                            <Gauge size={10} className="text-[var(--accent-primary)]" />
+                            <span className="text-[9px] font-bold font-mono text-white">{masterPlaybackRate}x</span>
+                        </div>
+                        <button onClick={() => { const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]; const i = speeds.indexOf(masterPlaybackRate); if (i < speeds.length - 1) setMasterPlaybackRate(speeds[i + 1]); }} className="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors" title="Faster"><ChevronRight size={10} /></button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={clsx("w-full glass-panel border-t border-white/10 flex flex-col items-center z-[70] shrink-0 p-2 gap-3 transition-all", cinemaMode ? "min-h-[4rem] py-1 bg-black/95" : "min-h-[6rem] bg-black/80 backdrop-blur-md")}>
 
@@ -304,36 +399,44 @@ const StandardControlPanel = ({
                     <div className="flex items-center justify-between gap-3 w-full">
                         {/* Prev Group/File (Flanking Left) */}
                         <div className="flex items-center gap-1 shrink-0 bg-white/5 rounded-xl p-1">
-                            <button onClick={() => skipGroup(-1)} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Prev Group"><SkipForward size={16} className="rotate-180" /></button>
-                            <button onClick={prevFile} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Prev File"><ChevronLeft size={18} /></button>
+                            <button onClick={() => skipGroup(-1)} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Prev Group [F]"><SkipForward size={16} className="rotate-180" /></button>
+                            <button onClick={prevFile} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Prev File [←]"><ChevronLeft size={18} /></button>
                         </div>
 
                         {/* Center Tools */}
                         <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-1 sm:gap-2">
-                            {/* Playback Actions */}
-                            <button onClick={onRandomizeAll} className="p-2 sm:p-2.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-xl border border-purple-500/20 transition-all active:scale-95" title="Random Start Point"><Shuffle size={16} /></button>
+                            <button onClick={onRandomizeAll} className="p-2 sm:p-2.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-xl border border-purple-500/20 transition-all active:scale-95" title="Random Start Point [R]"><Shuffle size={16} /></button>
                             <button onClick={toggleChaosMode} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", isChaosMode ? "bg-orange-500/20 hover:bg-orange-500/30 text-orange-500 border-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.3)]" : "bg-white/5 hover:bg-white/10 text-gray-400 border-white/5")} title={isChaosMode ? "Chaos Mode ON" : "Chaos Mode OFF"}><Flame size={16} fill={isChaosMode ? "currentColor" : "none"} /></button>
                             
                             <div className="w-px h-6 bg-white/10 mx-1" />
                             
                             <button onClick={onStopAll} className="p-2 sm:p-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl border border-red-500/20 transition-all active:scale-95" title="Stop All"><Square size={16} fill="currentColor" /></button>
                             
-                            <div className="relative group/play mx-1">
+                            {/* SEPARATE Pause Button */}
+                            <button
+                                onClick={onPauseAll}
+                                className={clsx("p-3 sm:p-3.5 rounded-2xl transition-all active:scale-95 flex items-center justify-center border",
+                                    isPlaying ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30 shadow-[0_0_12px_rgba(234,179,8,0.3)] hover:bg-yellow-500/30" : "bg-white/5 text-gray-400 border-white/5 hover:bg-white/10"
+                                )}
+                                title="Pause All"
+                            >
+                                <Pause size={20} fill="currentColor" />
+                            </button>
+                            
+                            {/* SEPARATE Play Button */}
+                            <div className="relative group/play">
                                 <div className="absolute inset-0 bg-[var(--accent-primary)]/20 blur-xl rounded-full opacity-0 group-hover/play:opacity-50 transition-opacity" />
                                 <button
-                                    onClick={isPlaying ? onPauseAll : onPlayAll}
-                                    className="relative z-10 p-4 bg-[var(--accent-primary)] hover:brightness-110 text-black rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.5)] active:scale-95 transition-all flex items-center justify-center"
-                                    title={isPlaying ? "Pause All" : "Play All"}
-                                >
-                                    {isPlaying ? (
-                                        <Pause size={24} fill="currentColor" />
-                                    ) : (
-                                        <Play size={24} fill="currentColor" className="ml-1" />
+                                    onClick={onPlayAll}
+                                    className={clsx("relative z-10 p-3 sm:p-3.5 rounded-2xl transition-all active:scale-95 flex items-center justify-center border",
+                                        !isPlaying ? "bg-[var(--accent-primary)] text-black border-[var(--accent-primary)] shadow-[0_0_20px_rgba(59,130,246,0.5)] hover:brightness-110 font-black" : "bg-white/5 text-gray-400 border-white/5 hover:bg-white/10"
                                     )}
+                                    title="Play All"
+                                >
+                                    <Play size={20} fill="currentColor" className="ml-0.5" />
                                 </button>
                             </div>
                             
-                            {/* Toggles */}
                             <div className="w-px h-6 bg-white/10 mx-1" />
                             
                             <button onClick={onRandomizeGrid} className="p-2 sm:p-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl border border-blue-500/20 transition-all active:scale-95" title="Randomize Grid"><RefreshCw size={16} /></button>
@@ -341,27 +444,27 @@ const StandardControlPanel = ({
                             
                             <div className="w-px h-6 bg-white/10 mx-1" />
                             
-                            <button onClick={toggleMediaFitMode} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", mediaFitMode === 'cover' ? "bg-amber-600 border-amber-500 text-white shadow-[0_0_10px_rgba(217,119,6,0.3)]" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-white/5")} title={mediaFitMode === 'cover' ? "Fit Media in Box (Contain)" : "Fill Box with Media (Cover)"}>
+                            <button onClick={toggleMediaFitMode} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", mediaFitMode === 'cover' ? "bg-amber-600 border-amber-500 text-white shadow-[0_0_10px_rgba(217,119,6,0.3)]" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-white/5")} title={mediaFitMode === 'cover' ? "Fit Media (Contain)" : "Fill Box (Cover)"}>
                                 {mediaFitMode === 'cover' ? <Minimize size={16} /> : <Maximize size={16} />}
                             </button>
                             
-                            <button onClick={toggleCinemaMode} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", cinemaMode ? "bg-purple-500 border-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.3)]" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-white/5")} title={cinemaMode ? "Exit Cinema Mode (Show Sidebars)" : "Enter Cinema Mode (Hide Sidebars)"}>
+                            <button onClick={toggleCinemaMode} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", cinemaMode ? "bg-purple-500 border-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.3)]" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-white/5")} title={cinemaMode ? "Exit Cinema" : "Cinema Mode"}>
                                 <Monitor size={16} />
                             </button>
                             
-                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); }} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", fullscreenMode ? "bg-red-500 border-red-500 text-white shadow-lg" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-white/5")} title="Widescreen/Fullscreen">
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); }} className={clsx("p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 border", fullscreenMode ? "bg-red-500 border-red-500 text-white shadow-lg" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-white/5")} title="Fullscreen [Shift+F]">
                                 {fullscreenMode ? <Minimize size={16} /> : <Maximize size={16} />}
                             </button>
                         </div>
 
                         {/* Next Group/File (Flanking Right) */}
                         <div className="flex items-center gap-1 shrink-0 bg-white/5 rounded-xl p-1">
-                            <button onClick={nextFile} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Next File"><ChevronRight size={18} /></button>
-                            <button onClick={() => skipGroup(1)} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Next Group"><SkipForward size={16} /></button>
+                            <button onClick={nextFile} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Next File [→]"><ChevronRight size={18} /></button>
+                            <button onClick={() => skipGroup(1)} className="p-1.5 sm:p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Next Group [G]"><SkipForward size={16} /></button>
                         </div>
                     </div>
 
-                    {/* Bottom: Volume Slider (Full Width) */}
+                    {/* Bottom: Volume Slider (Logarithmic) */}
                     <div className="flex items-center gap-2 px-2 pb-1 group/vol">
                         <button onClick={() => setIsMasterMuted(!isMasterMuted)} className={clsx("p-1 transition-colors", isMasterMuted ? "text-gray-500" : "text-[var(--text-dim)] hover:text-white")}>
                             {isMasterMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
@@ -369,9 +472,9 @@ const StandardControlPanel = ({
                         <input
                             type="range"
                             min="0"
-                            max="100"
-                            value={isMasterMuted ? 0 : masterVolume * 100}
-                            onChange={(e) => { setMasterVolume(parseInt(e.target.value) / 100); setIsMasterMuted(false); }}
+                            max="200"
+                            value={sliderValue}
+                            onChange={handleVolumeChange}
                             className="w-full h-1 accent-[var(--accent-primary)] bg-white/10 rounded-full cursor-pointer opacity-60 group-hover/vol:opacity-100 transition-opacity"
                         />
                     </div>
@@ -382,7 +485,6 @@ const StandardControlPanel = ({
             {!cinemaMode && (
                 <div className="flex items-center justify-center gap-4 sm:gap-6 mt-1 flex-wrap">
 
-                    {/* Backward Skips */}
                     <div className="flex items-center gap-1">
                         <button onClick={() => onSkipAll(-300)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors hidden sm:block">-5m</button>
                         <button onClick={() => onSkipAll(-120)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors">-2m</button>
@@ -390,44 +492,21 @@ const StandardControlPanel = ({
                         <button onClick={() => onSkipAll(-5)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors">-5s</button>
                     </div>
 
-                    {/* Speed Controls */}
                     <div className="flex items-center bg-black/40 border border-white/10 rounded-full px-1 py-0.5 shadow-lg">
-                        <button
-                            onClick={() => {
-                                const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-                                const index = speeds.indexOf(masterPlaybackRate);
-                                if (index > 0) setMasterPlaybackRate(speeds[index - 1]);
-                            }}
-                            className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors"
-                            title="Slower"
-                        >
-                            <ChevronLeft size={14} />
-                        </button>
+                        <button onClick={() => { const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]; const i = speeds.indexOf(masterPlaybackRate); if (i > 0) setMasterPlaybackRate(speeds[i - 1]); }} className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors" title="Slower"><ChevronLeft size={14} /></button>
                         <div className="flex flex-col items-center justify-center px-3 min-w-[48px]">
                             <Gauge size={12} className="text-[var(--accent-primary)] mb-0.5" />
                             <span className="text-[10px] font-bold font-mono text-white">{masterPlaybackRate}x</span>
                         </div>
-                        <button
-                            onClick={() => {
-                                const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-                                const index = speeds.indexOf(masterPlaybackRate);
-                                if (index < speeds.length - 1) setMasterPlaybackRate(speeds[index + 1]);
-                            }}
-                            className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors"
-                            title="Faster"
-                        >
-                            <ChevronRight size={14} />
-                        </button>
+                        <button onClick={() => { const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]; const i = speeds.indexOf(masterPlaybackRate); if (i < speeds.length - 1) setMasterPlaybackRate(speeds[i + 1]); }} className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-colors" title="Faster"><ChevronRight size={14} /></button>
                     </div>
 
-                    {/* Forward Skips */}
                     <div className="flex items-center gap-1">
                         <button onClick={() => onSkipAll(10)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors">+10s</button>
                         <button onClick={() => onSkipAll(120)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors">+2m</button>
                         <button onClick={() => onSkipAll(300)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors hidden sm:block">+5m</button>
                         <button onClick={() => onSkipAll(600)} className="text-[10px] font-bold text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors hidden sm:block">+10m</button>
                     </div>
-
                 </div>
             )}
         </div>
@@ -447,15 +526,17 @@ const CenterView = () => {
         masterVolume, setMasterVolume, isMasterMuted, setIsMasterMuted,
         pinnedGrids, togglePin, clearPins, unpinItem,
         favoriteItems, toggleFavorite, toggleItemExclusion, showJumpButtons,
-        globalIsPlaying, setGlobalIsPlaying
+        globalIsPlaying, setGlobalIsPlaying,
+        appViewMode,
+        controlsMode, cycleControlsMode,
+        studioFilter, clearStudioFilter, setAppViewMode
     } = useMediaStore();
 
     const sortedFiles = getSortedFiles();
 
     // DEBUG: Trace Navigation State
-    useEffect(() => {
-        console.log('[CenterView] Folder Change Detected:', { currentFolder, fileCount: sortedFiles.length });
-    }, [currentFolder, sortedFiles.length]);
+    // Track previous folder to avoid resetting index on view mode change
+    const prevFolderRef = useRef(currentFolder);
 
     const videoRegistryRef = useRef(new Map());
     // const [masterVolume, setMasterVolume] = useState(0.5); // Removed local state
@@ -526,10 +607,13 @@ const CenterView = () => {
         setGridOffsets({});
     }, [currentFolder, currentFileIndex]);
 
-    // Reset playback state on folder change
+    // Reset playback state on ACTUAL folder change only (not view mode transitions)
     useEffect(() => {
-        setCurrentFileIndex(0);
-        setIsPlaying(false);
+        if (prevFolderRef.current !== currentFolder) {
+            prevFolderRef.current = currentFolder;
+            setCurrentFileIndex(0);
+            setIsPlaying(false);
+        }
     }, [currentFolder, setCurrentFileIndex]);
 
     // Video Registry (Optimized to use Ref to avoid re-renders)
@@ -563,6 +647,57 @@ const CenterView = () => {
     const randomizeAll = () => {
         videoRegistryRef.current.forEach(v => { if (v.duration) v.currentTime = Math.random() * v.duration; });
     };
+
+    // === Sync globalIsPlaying state to actual video elements (for spacebar play/pause) ===
+    useEffect(() => {
+        if (globalIsPlaying) {
+            videoRegistryRef.current.forEach(v => {
+                v.play().catch(() => {});
+            });
+        } else {
+            videoRegistryRef.current.forEach(v => v.pause());
+        }
+    }, [globalIsPlaying]);
+
+    // === Auto-play newly mounted videos on navigation when already playing ===
+    useEffect(() => {
+        if (!globalIsPlaying) return;
+        // Short delay to let new video elements mount & register
+        const timer = setTimeout(() => {
+            videoRegistryRef.current.forEach(v => {
+                if (v.paused) v.play().catch(() => {});
+            });
+        }, 150);
+        return () => clearTimeout(timer);
+    }, [currentFileIndex, globalIsPlaying]);
+
+    // === Mouse wheel volume control with floating HUD ===
+    const [volumeHudVisible, setVolumeHudVisible] = useState(false);
+    const volumeHudTimeoutRef = useRef(null);
+
+    const handleWheel = useCallback((e) => {
+        e.preventDefault();
+        // Fine-grained linear steps for smooth, fluid volume control
+        const delta = e.deltaY > 0 ? -0.01 : 0.01;
+        const state = useMediaStore.getState();
+        const rawVol = state.masterVolume + delta;
+        const newVol = Math.min(4, Math.max(0, Math.round(rawVol * 1000) / 1000));
+        state.setMasterVolume(newVol);
+        if (newVol > 0) state.setIsMasterMuted(false);
+        else state.setIsMasterMuted(true);
+        setVolumeHudVisible(true);
+        if (volumeHudTimeoutRef.current) clearTimeout(volumeHudTimeoutRef.current);
+        volumeHudTimeoutRef.current = setTimeout(() => setVolumeHudVisible(false), 1200);
+    }, []);
+
+    // Attach wheel handler to container
+    const centerContainerRef = useRef(null);
+    useEffect(() => {
+        const el = centerContainerRef.current;
+        if (!el) return;
+        el.addEventListener('wheel', handleWheel, { passive: false });
+        return () => el.removeEventListener('wheel', handleWheel);
+    }, [handleWheel]);
 
     // Slideshow Timer
     useEffect(() => {
@@ -685,10 +820,73 @@ const CenterView = () => {
 
     return (
         <VideoRegistryContext.Provider value={contextValue}>
-            <div className="h-full w-full flex flex-col relative overflow-hidden">
-                <SlideshowOverlay />
+            <div ref={centerContainerRef} className="h-full w-full flex flex-col relative overflow-hidden">
+                {/* Only render SlideshowOverlay when actually in slideshow-like state */}
+                {appViewMode === 'slideshow' && slideshowActive && <SlideshowOverlay />}
 
-                <div className="flex-1 p-4 min-h-0 bg-[var(--bg-primary)]/50 backdrop-blur-sm relative">
+                {/* Floating Volume HUD — Top Right Vertical Bar */}
+                <AnimatePresence>
+                    {volumeHudVisible && (
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            className="absolute top-6 right-6 z-[100] bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl px-3 py-4 flex flex-col items-center gap-3 shadow-2xl pointer-events-none"
+                        >
+                            {isMasterMuted || masterVolume === 0
+                                ? <VolumeX size={16} className="text-white/60" />
+                                : <Volume2 size={16} className="text-white/60" />
+                            }
+                            <div className="w-1.5 h-28 bg-white/10 rounded-full overflow-hidden flex flex-col-reverse">
+                                <div
+                                    className={clsx("w-full rounded-full transition-all duration-100 ease-out", masterVolume > 1 ? "bg-orange-400" : "bg-[var(--accent-primary)]")}
+                                    style={{ height: `${Math.min(100, Math.round(masterVolume * 25))}%` }}
+                                />
+                            </div>
+                            <span className={clsx("text-[10px] font-mono font-bold", masterVolume > 1 ? "text-orange-400" : "text-white/80")}>
+                                {Math.round(masterVolume * 100)}%
+                            </span>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <div className="flex-1 p-4 min-h-0 bg-[var(--bg-primary)]/30 relative">
+
+                        {/* Studio Filter Banner */}
+                        <AnimatePresence>
+                            {studioFilter && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -20 }}
+                                    className="absolute top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-indigo-500/15 border border-indigo-500/30 backdrop-blur-xl px-4 py-2 rounded-full shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                                >
+                                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-indigo-400 shrink-0">
+                                        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                                        <circle cx="8" cy="8" r="2" fill="currentColor" />
+                                    </svg>
+                                    <span className="text-[10px] font-bold text-indigo-200 tracking-wider uppercase">
+                                        {studioFilter.label}
+                                    </span>
+                                    <span className="text-[9px] font-mono text-indigo-400/70 bg-indigo-500/20 px-1.5 py-0.5 rounded-full">
+                                        {studioFilter.filePaths?.length || 0} items
+                                    </span>
+                                    <button
+                                        onClick={() => setAppViewMode('studio')}
+                                        className="text-[9px] font-bold text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/40 px-2 py-0.5 rounded-full transition-colors"
+                                    >
+                                        STUDIO
+                                    </button>
+                                    <button
+                                        onClick={clearStudioFilter}
+                                        className="text-[9px] font-bold text-white bg-indigo-500 hover:bg-indigo-400 px-2 py-0.5 rounded-full transition-colors"
+                                    >
+                                        CLEAR
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     
                         {/* Clear Pins Floating Button */}
                         <AnimatePresence>
@@ -746,17 +944,17 @@ const CenterView = () => {
                         </AnimatePresence>
                     </div>
 
-                    {/* Bubble Pagination Overlay */}
-                    {totalPages > 1 && !slideshowActive && (
+                    {/* Bubble Pagination Overlay — only shown when user enables Jump Bubble in Settings */}
+                    {showJumpButtons && totalPages > 1 && !slideshowActive && (
                         <div 
-                            className="absolute bottom-0 inset-x-0 h-24 flex items-end justify-center pb-6 z-50"
+                            className="absolute bottom-0 inset-x-0 h-20 flex items-end justify-center pb-4 z-50"
                             onMouseEnter={() => handlePaginationHover(true)}
                             onMouseLeave={() => handlePaginationHover(false)}
                         >
                             <div 
                                 className={clsx(
                                     "flex items-center gap-1 p-2 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 transition-all duration-500 max-w-[80vw] sm:max-w-[400px] w-full touch-none shadow-2xl overflow-hidden",
-                                    (showJumpButtons || showPagination) ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+                                    showPagination ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
                                 )}
                                 onPointerDown={handlePointerDown}
                                 onPointerMove={handlePointerMove}
@@ -788,12 +986,29 @@ const CenterView = () => {
                     )}
                 </div>
 
+                {/* Mini toggle to collapse/expand controls */}
+                {!slideshowActive && (
+                    <button
+                        onClick={cycleControlsMode}
+                        className="w-full flex items-center justify-center py-0.5 bg-black/60 hover:bg-white/5 transition-colors z-[71] shrink-0 group/collapse"
+                        title={`Controls: ${controlsMode} → Click to cycle`}
+                    >
+                        {controlsMode === 'full'
+                            ? <ChevronsDown size={12} className="text-gray-500 group-hover/collapse:text-white transition-colors" />
+                            : controlsMode === 'standard'
+                                ? <ChevronDown size={12} className="text-gray-500 group-hover/collapse:text-white transition-colors" />
+                                : <ChevronsUp size={12} className="text-gray-500 group-hover/collapse:text-white transition-colors" />
+                        }
+                    </button>
+                )}
+
                 {!slideshowActive && (
                     <StandardControlPanel
                         onPlayAll={playAll} onPauseAll={pauseAll} onStopAll={stopAll} onRandomizeAll={randomizeAll} onSkipAll={skipAll}
                         onRandomizeGrid={randomizeGrid}
                         masterVolume={masterVolume} setMasterVolume={setMasterVolume} isMasterMuted={isMasterMuted} setIsMasterMuted={setIsMasterMuted}
                         isPlaying={isPlaying}
+                        minimized={controlsMode}
                     />
                 )}
             </div>

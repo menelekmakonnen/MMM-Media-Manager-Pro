@@ -22,6 +22,7 @@ const useMediaStore = create(persist((set, get) => ({
     appViewMode: 'standard', // 'standard' | 'gallery' | 'slideshow' | 'fullscreen'
     previousViewMode: 'standard', // For backing out of slideshow
     mediaFitMode: 'contain', // 'contain' | 'cover' - Global setting for media fitting
+    videoSeekTimes: {}, // { [filePath]: seconds } — persists seek position across view transitions
 
     // === GALLERY STATE ===
     galleryZoom: 200,
@@ -38,17 +39,45 @@ const useMediaStore = create(persist((set, get) => ({
 
     trailerSettings: {
         template: 'social', // 'social' | 'epic' | 'gym' | 'kinetic' | 'custom'
+        templates: ['social'],
         targetDuration: 30, // seconds
         shortestClip: 0.2,
         longestClip: 1.0,
         allowDuplicates: true,
         allowSameSegment: false,
         mediaType: 'video', // 'video' | 'image'
+        orientationFilter: 'all', // 'all' | 'horizontal' | 'vertical' | 'square'
         audioMixStrategy: 'muted', // 'muted' | 'subtle' | 'original' | 'ducking'
         slowmoPolicy: 'none', // 'none' | 'mixed' | 'all'
         audioTimelineStrategy: 'loop', // 'loop' | 'fade' | 'continue'
         matchAudioDuration: true,
-        beatSensitivity: 0.5
+        beatSensitivity: 0.5,
+        // === Pro Engine: Editing Styles ===
+        editingStyleMix: 'none', // 'none' | 'light' | 'heavy' | 'every'
+        editingStyles: ['rubber-band-standard', 'multi-boomerang'],
+        styleConfig: {
+            rampFastSpeed: 2.5,
+            rampSlowSpeed: 0.25,
+            fastPortion: 0.12,
+            slowPortion: 0.38,
+            zoomRange: 145,
+            boomerangSlices: 4,
+            reversalChance: 0.85,
+            burstMode: 'short',
+        },
+        // === Pro Engine: Transitions ===
+        transitionsEnabled: true,
+        transitionPreset: 'cinematic',
+        maxSimultaneousTransitions: 1,
+        simultaneousTransitionDelay: 0.2,
+        // === Pro Engine: Grid Layouts ===
+        includeGrids: 'off', // 'off' | 'mixed' | 'grids-only'
+        // === Pro Engine: Orientation Filter ===
+        orientationFilter: 'all', // 'all' | 'horizontal' | 'vertical' | 'square'
+        // === Pro Engine: Beat Sync Intelligence ===
+        beatPattern: 'auto', // 'auto' | 'every' | 'half' | 'quarter' | 'drops' | 'risers-drops'
+        beatSyncStrategy: 'auto', // 'auto' | 'cut-on-beat' | 'transition-on-beat' | 'effect-on-drop' | 'riser-buildup' | 'groove-ride'
+        selectedSegments: ['intro', 'buildup', 'drop', 'breakdown', 'chorus', 'verse', 'outro', 'bridge'],
     },
     setTrailerSettings: (settings) => set(state => ({ trailerSettings: { ...state.trailerSettings, ...settings } })),
     
@@ -89,7 +118,7 @@ const useMediaStore = create(persist((set, get) => ({
     // === SLIDESHOW STATE ===
     slideshowActive: false,
     slideshowRandom: false,
-    slideshowDuration: 5, // Default 5s
+    slideshowDuration: 5, // Default 5s (range: 1-90)
     slideshowTransition: 'fade', // 'none' | 'fade' | 'slide' | 'zoom' | 'swipe' | 'flip' | ...
     superSlideshowActive: false,
     slideshowIdle: false, // For hiding UI in immersive mode
@@ -104,7 +133,7 @@ const useMediaStore = create(persist((set, get) => ({
     setSuperSlideshowActive: (active) => set({ superSlideshowActive: active }),
     toggleSuperSlideshow: () => set(state => ({ superSlideshowActive: !state.superSlideshowActive })),
     setSlideshowIdle: (idle) => set({ slideshowIdle: idle }),
-    adjustSlideshowDuration: (delta) => set(state => ({ slideshowDuration: Math.max(1, state.slideshowDuration + delta) })),
+    adjustSlideshowDuration: (delta) => set(state => ({ slideshowDuration: Math.max(1, Math.min(90, state.slideshowDuration + delta)) })),
     triggerRandomStart: () => set(state => ({ shuffleSeed: state.shuffleSeed + 1 })), // Re-use shuffle seed to trigger effects
 
     // === ACTIONS: Playback ===
@@ -221,12 +250,16 @@ const useMediaStore = create(persist((set, get) => ({
         playPause: ' ', // Space
         nextItem: 'ArrowRight',
         prevItem: 'ArrowLeft',
-        nextGroup: ['Control', 'ArrowRight'],
-        prevGroup: ['Control', 'ArrowLeft'],
+        nextGroup: 'g', // G key
+        prevGroup: 'f', // F key
         volumeUp: 'ArrowUp',
         volumeDown: 'ArrowDown',
         scrollUp: 'ArrowUp', // Gallery View
         scrollDown: 'ArrowDown', // Gallery View
+        randomJump: 'r', // R key — skip to random spot in video(s)
+        toggleView: 'Escape', // ESC — cycle views sequentially
+        fullscreen: ['Shift', 'F'], // Shift+F for fullscreen
+        movieMode: 'm', // M key
         grid1: '1', grid2: '2', grid3: '3', grid4: '4',
         grid6: '6', grid9: '9', grid12: '5'
     },
@@ -274,10 +307,52 @@ const useMediaStore = create(persist((set, get) => ({
         nameLength: 'all',  // 'all' | 'short' | 'medium' | 'long'
         resolution: 'all'   // 'all' | 'low' | 'high' | '4k'
     },
+    // Multi-select aspect ratio filters (Left Sidebar toggles)
+    // When all three are active => show all. Toggling off one hides that orientation.
+    aspectRatioFilters: ['horizontal', 'vertical', 'square'],
+    toggleAspectRatioFilter: (orientation) => {
+        set(state => {
+            const current = state.aspectRatioFilters;
+            const has = current.includes(orientation);
+            // Don't allow deselecting all — keep at least one
+            if (has && current.length <= 1) return {};
+            const next = has ? current.filter(o => o !== orientation) : [...current, orientation];
+            return { aspectRatioFilters: next };
+        });
+        get().updateProcessedFiles();
+    },
 
     // === DISPLAY OPTIONS ===
     showJumpButtons: false,
     toggleJumpButtons: () => set(state => ({ showJumpButtons: !state.showJumpButtons })),
+    controlsMode: 'full', // 'full' | 'standard' | 'shrunk'
+    setControlsMode: (mode) => set({ controlsMode: mode }),
+    cycleControlsMode: () => set(state => {
+        const modes = ['full', 'standard', 'shrunk'];
+        const next = modes[(modes.indexOf(state.controlsMode) + 1) % modes.length];
+        return { controlsMode: next };
+    }),
+
+    // === ACTIVITY LOG (Studio Page) ===
+    activityLog: [],
+    addActivity: (entry) => set(state => ({
+        activityLog: [{ ...entry, timestamp: Date.now(), id: Date.now() + Math.random() }, ...state.activityLog].slice(0, 200)
+    })),
+    clearActivityLog: () => set({ activityLog: [] }),
+
+    // === STUDIO → GRID DRILL-DOWN FILTER ===
+    // When a user clicks a stat/bar/row in Studio, this filter is set and they
+    // are navigated to Grid view with only those files visible.
+    studioFilter: null, // { type: string, label: string, filePaths: string[] } | null
+    setStudioFilter: (filter) => {
+        set({ studioFilter: filter });
+        get().updateProcessedFiles();
+    },
+    clearStudioFilter: () => {
+        set({ studioFilter: null });
+        get().updateProcessedFiles();
+    },
+
     grayscaleInactive: false,
     setGrayscaleInactive: (val) => set({ grayscaleInactive: val }),
     thumbnailSize: 120,
@@ -343,12 +418,12 @@ const useMediaStore = create(persist((set, get) => ({
         // Apply Metadata Filters for parity
         if (metadataFilters.aspectRatio !== 'all') {
             filtered = filtered.filter(f => {
-                // Absolute orientation: width > height = landscape, height > width = portrait, equal = square
+                // Absolute orientation: width > height = horizontal, height > width = vertical, equal = square
                 const w = f.width || 0;
                 const h = f.height || 0;
                 
-                if (metadataFilters.aspectRatio === 'landscape') return w > h;
-                if (metadataFilters.aspectRatio === 'portrait') return h > w;
+                if (metadataFilters.aspectRatio === 'horizontal') return w > h;
+                if (metadataFilters.aspectRatio === 'vertical') return h > w;
                 if (metadataFilters.aspectRatio === 'square') return w === h;
                 return true;
             });
@@ -384,15 +459,28 @@ const useMediaStore = create(persist((set, get) => ({
             appViewMode: mode,
             previousViewMode: state.appViewMode !== mode ? state.appViewMode : state.previousViewMode
         };
-        // Safety: Wipe slideshow states when navigating back to standard (unless they just activated movieMode which doesn't use setAppViewMode)
+        // Safety: Wipe slideshow auto-advance states when leaving slideshow
+        // but PRESERVE currentFileIndex, gridColumns, gridRows so video position is maintained
         if (mode !== 'slideshow') {
             nextState.slideshowActive = false;
             nextState.slideshowAutoAdvance = false;
             nextState.superSlideshowActive = false;
+            nextState.slideshowIdle = false;
         }
         return nextState;
     }),
     setMediaContextMenu: (menu) => set({ mediaContextMenu: menu }),
+
+    // Video seek position persistence across Standard ↔ Slideshow transitions
+    setVideoSeekTime: (filePath, time) => set(state => ({
+        videoSeekTimes: { ...state.videoSeekTimes, [filePath]: time }
+    })),
+    getVideoSeekTime: (filePath) => get().videoSeekTimes[filePath] || 0,
+    clearVideoSeekTime: (filePath) => set(state => {
+        const next = { ...state.videoSeekTimes };
+        delete next[filePath];
+        return { videoSeekTimes: next };
+    }),
 
     sendToEditor: async (mediaItem, currentFrame = 0, fullClip = false) => {
         const { useClipStore } = await import('./clipStore');
@@ -789,7 +877,7 @@ const useMediaStore = create(persist((set, get) => ({
 
     // === COMPUTED: Sorted Files ===
     calculateSortedFiles: () => {
-        const { files, folders, fileTypeFilter, sortStack, activeFolders, explorerSearchQuery, showDuplicates, excludedFolders, excludedItems } = get();
+        const { files, folders, fileTypeFilter, sortStack, activeFolders, explorerSearchQuery, showDuplicates, excludedFolders, excludedItems, studioFilter, aspectRatioFilters } = get();
 
         // 0. Filter by Exclusions
         let filtered = files;
@@ -800,6 +888,28 @@ const useMediaStore = create(persist((set, get) => ({
         if (excludedFolders && excludedFolders.length > 0) {
             filtered = filtered.filter(f => {
                 return !excludedFolders.some(folder => f.folderPath === folder || f.folderPath?.startsWith(folder + '/'));
+            });
+        }
+
+        // 0.3 Studio drill-down filter (highest priority — restricts to specific file set)
+        if (studioFilter && studioFilter.filePaths && studioFilter.filePaths.length > 0) {
+            const pathSet = new Set(studioFilter.filePaths);
+            filtered = filtered.filter(f => pathSet.has(f.path));
+        }
+
+        // 0.4 Multi-select aspect ratio filter (Left Sidebar toggles)
+        if (aspectRatioFilters && aspectRatioFilters.length < 3) {
+            filtered = filtered.filter(f => {
+                const w = f.width || 0;
+                const h = f.height || 0;
+                if (w === 0 && h === 0) return true; // No metadata yet, show it
+                const isHoriz = w > h;
+                const isVert = h > w;
+                const isSquare = w === h;
+                if (isHoriz && aspectRatioFilters.includes('horizontal')) return true;
+                if (isVert && aspectRatioFilters.includes('vertical')) return true;
+                if (isSquare && aspectRatioFilters.includes('square')) return true;
+                return false;
             });
         }
 
@@ -842,8 +952,8 @@ const useMediaStore = create(persist((set, get) => ({
                 // Absolute orientation: width > height = landscape, height > width = portrait, equal = square
                 const w = f.width || 0;
                 const h = f.height || 0;
-                if (metadataFilters.aspectRatio === 'landscape') return w > h;
-                if (metadataFilters.aspectRatio === 'portrait') return h > w;
+                if (metadataFilters.aspectRatio === 'horizontal') return w > h;
+                if (metadataFilters.aspectRatio === 'vertical') return h > w;
                 if (metadataFilters.aspectRatio === 'square') return w === h;
                 return true;
             });
@@ -957,6 +1067,7 @@ const useMediaStore = create(persist((set, get) => ({
         themeMode: state.themeMode,
         gridColumns: state.gridColumns,
         gridRows: state.gridRows,
+        viewMode: state.viewMode, // Grid layout persistence across sessions
         sidebarGridColumns: state.sidebarGridColumns,
         thumbnailSize: state.thumbnailSize,
         thumbnailOrientation: state.thumbnailOrientation,
@@ -969,6 +1080,7 @@ const useMediaStore = create(persist((set, get) => ({
         showJumpButtons: state.showJumpButtons,
         metadataFilters: state.metadataFilters,
         fileTypeFilter: state.fileTypeFilter,
+        aspectRatioFilters: state.aspectRatioFilters, // Multi-select orientation filter
         threeGridEqual: state.threeGridEqual,
         nineGridHero: state.nineGridHero,
         galleryZoom: state.galleryZoom,
@@ -982,7 +1094,9 @@ const useMediaStore = create(persist((set, get) => ({
         excludedFolders: state.excludedFolders,
         excludedItems: state.excludedItems,
         favoriteItems: state.favoriteItems,
-        favoritesOnly: state.favoritesOnly
+        favoritesOnly: state.favoritesOnly,
+        keyboardBindings: state.keyboardBindings,
+        controlsMode: state.controlsMode
     }),
 }));
 

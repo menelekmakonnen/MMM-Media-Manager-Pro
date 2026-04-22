@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle, Maximize, Minimize, Film, Wand2, MonitorPlay } from 'lucide-react';
+import { ChevronRight, RefreshCw, Trash2, FolderOpen, Plus, XOctagon, Layout, Image as ImageIcon, PlayCircle, Maximize, Minimize, Film, Wand2, LayoutDashboard } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
 import { clearThumbnailCache } from '../../utils/thumbnailCache';
 import { openDirectory } from '../../utils/fileSystem';
 import { saveFolderHandle } from '../../utils/persistence';
 import clsx from 'clsx';
-import { getLogoSvgString } from '../../utils/LogoGenerator';
+import DarkroomLogo from '../DarkroomLogo';
 
 import WindowControls from './WindowControls';
 
 const TopBar = () => {
-    const [logoUrl, setLogoUrl] = useState('');
     const {
         currentFolder, isScanning, startScan, cancelScan, setFolderHandle, setCurrentFolder,
         explorerSearchQuery, setExplorerSearchQuery,
@@ -20,15 +19,6 @@ const TopBar = () => {
     } = useMediaStore();
     
     const [showTrailerWarning, setShowTrailerWarning] = useState(false);
-
-    useEffect(() => {
-        // slight delay to allow CSS vars to update in DOM
-        setTimeout(() => {
-            const accentColor = getComputedStyle(document.body).getPropertyValue('--accent-primary').trim() || '#3b82f6';
-            const svgString = getLogoSvgString(accentColor);
-            setLogoUrl(`data:image/svg+xml;base64,${btoa(svgString)}`);
-        }, 50);
-    }, [theme]);
 
     // Format path for breadcrumbs
     const pathParts = currentFolder ? currentFolder.split('/').filter(Boolean) : [];
@@ -123,16 +113,16 @@ const TopBar = () => {
 
                     {/* Branding */}
                     <button
-                        className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                        className="flex items-center gap-3 hover:opacity-90 transition-opacity"
                         onClick={() => {
-                            const modes = ['standard', 'stream', 'slideshow', 'gallery', 'editor', 'settings'];
+                            const modes = ['standard', 'studio', 'slideshow', 'gallery', 'trailer', 'settings'];
                             const next = modes[(modes.indexOf(appViewMode) + 1) % modes.length];
                             setAppViewMode(next);
                         }}
                         style={{ WebkitAppRegion: 'no-drag' }}
                         title="Toggle View Mode"
                     >
-                        <img src={logoUrl || "/icon.png"} alt="Mmmedia Darkroom Logo" className="w-8 h-8 object-contain hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
+                        <DarkroomLogo size={32} title="MMMedia Darkroom" />
                         <div className="flex flex-col items-start justify-center h-8">
                             <h1 className="text-[1.15rem] font-black tracking-tight leading-none text-white/90 drop-shadow-sm flex items-center gap-1.5 pt-0.5">
                                 MMMedia <span className="font-light text-[var(--accent-primary)]/90 tracking-widest uppercase text-xs">Darkroom</span>
@@ -149,15 +139,15 @@ const TopBar = () => {
                 {/* View Switcher (Center-Right) */}
                 <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5 mx-4" style={{ WebkitAppRegion: 'no-drag' }}>
                     <button
-                        onClick={() => setAppViewMode('stream')}
+                        onClick={() => setAppViewMode('studio')}
                         className={clsx(
                             "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all flex-shrink-0",
-                            appViewMode === 'stream' ? "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]" : "text-white/40 hover:bg-white/10 hover:text-white"
+                            appViewMode === 'studio' ? "bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]" : "text-white/40 hover:bg-white/10 hover:text-white"
                         )}
-                        title="Cinematic Stream View"
+                        title="Studio Dashboard"
                     >
-                        <MonitorPlay size={14} />
-                        <span className="hidden xl:inline">Stream</span>
+                        <LayoutDashboard size={14} />
+                        <span className="hidden xl:inline">Studio</span>
                     </button>
                     <button
                         onClick={() => setAppViewMode('standard')}
@@ -202,17 +192,6 @@ const TopBar = () => {
                     >
                         <Wand2 size={14} />
                         <span className="hidden xl:inline">Trailer</span>
-                    </button>
-                    <button
-                        onClick={() => setAppViewMode('editor')}
-                        className={clsx(
-                            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
-                            appViewMode === 'editor' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/10 hover:text-white"
-                        )}
-                        title="Timeline Editor View"
-                    >
-                        <Film size={14} />
-                        <span className="hidden xl:inline">Editor</span>
                     </button>
                     <div className="w-px h-5 bg-white/10 mx-1"></div>
                     <button

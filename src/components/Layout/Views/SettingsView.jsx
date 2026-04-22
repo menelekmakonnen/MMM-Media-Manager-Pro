@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import useMediaStore from '../../../stores/useMediaStore';
 import clsx from 'clsx';
-import { Settings2, Keyboard, Sliders, Layout, Film, Image as ImageIcon, LayoutGrid, Check, CheckCircle2, MonitorPlay } from 'lucide-react';
+import { Settings2, Keyboard, Sliders, Layout, Film, Image as ImageIcon, LayoutGrid, Check, CheckCircle2, MonitorPlay, Link2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import BridgeStatus from '../../BridgeStatus';
+import ProBridgeActions from '../../ProBridgeActions';
 
 const SettingsView = () => {
     const { settingsStartupTab, setSettingsStartupTab } = useMediaStore();
@@ -16,6 +18,7 @@ const SettingsView = () => {
         { id: 'gallery', label: 'Gallery Engine', icon: ImageIcon },
         { id: 'editor', label: 'Timeline Editor', icon: Film },
         { id: 'keyboard', label: 'Keyboard Mapping', icon: Keyboard },
+        { id: 'bridge', label: 'Pro Bridge', icon: Link2 },
         { id: 'self', label: 'App Settings', icon: Sliders }
     ];
 
@@ -28,13 +31,14 @@ const SettingsView = () => {
             case 'gallery': return <GallerySettings />;
             case 'editor': return <EditorSettings />;
             case 'keyboard': return <KeyboardSettings />;
+            case 'bridge': return <ProBridgeSettings />;
             case 'self': return <SelfSettings />;
             default: return null;
         }
     };
 
     return (
-        <div className="h-full w-full flex bg-[#020205] text-white overflow-hidden relative font-sans">
+        <div className="h-full w-full flex bg-transparent text-white overflow-hidden relative font-sans">
             {/* Ambient Background Glows */}
             <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-[var(--accent-primary)]/10 blur-[120px] rounded-full pointer-events-none" />
             <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-[var(--accent-secondary)]/5 blur-[150px] rounded-full pointer-events-none" />
@@ -763,6 +767,52 @@ const SelfSettings = () => {
                     >
                         Factory Reset
                     </button>
+                </div>
+            </SettingSection>
+        </div>
+    );
+};
+
+const ProBridgeSettings = () => {
+    return (
+        <div className="space-y-6">
+            <SettingsHeader title="MMMedia Pro Bridge" description="Connect to MMMedia Pro for cross-application editing workflows. Save and load .mmm project files, or send clips and media directly to Pro via the live bridge." />
+            
+            <SettingSection title="Connection Status">
+                <BridgeStatus />
+            </SettingSection>
+
+            <SettingSection title="Project File Operations">
+                <div className="space-y-4">
+                    <div>
+                        <h5 className="font-bold text-gray-200 text-base mb-2">Save & Load .mmm Projects</h5>
+                        <p className="text-sm text-gray-400/90 mb-4 leading-relaxed">
+                            The .mmm format is the standard project file shared between MMMedia Darkroom and MMMedia Pro. 
+                            Save your current timeline as a .mmm file, or load one from Pro to continue editing here.
+                        </p>
+                    </div>
+                    <ProBridgeActions layout="row" />
+                </div>
+            </SettingSection>
+
+            <SettingSection title="Protocol Information">
+                <div className="space-y-4 text-sm">
+                    <div className="flex items-center justify-between">
+                        <span className="text-gray-400 font-medium">Manifest Version</span>
+                        <span className="font-mono text-white/80 bg-black/40 px-3 py-1 rounded-lg border border-white/5">1.0.0</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-gray-400 font-medium">Bridge Port</span>
+                        <span className="font-mono text-white/80 bg-black/40 px-3 py-1 rounded-lg border border-white/5">19797</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-gray-400 font-medium">File Format</span>
+                        <span className="font-mono text-white/80 bg-black/40 px-3 py-1 rounded-lg border border-white/5">.mmm (JSON)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-gray-400 font-medium">Timing System</span>
+                        <span className="font-mono text-white/80 bg-black/40 px-3 py-1 rounded-lg border border-white/5">Frame-based</span>
+                    </div>
                 </div>
             </SettingSection>
         </div>

@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 export const TrailerView = () => {
     // Stores
     const { 
-        setAppViewMode, setTrailerModalOpen, trailerSettings,
+        setAppViewMode, setTrailerModalOpen, trailerSettings, setTrailerSettings: updateTrailerSettings,
         explorerSelectedFiles, getSortedFiles, files,
         masterVolume, setMasterVolume,
         trailerDraftSequence: draftSequence, setTrailerDraftSequence: setDraftSequence, clearTrailerDraftSequence
@@ -38,20 +38,52 @@ export const TrailerView = () => {
     const activeVideoRef = useRef('A');
     const audioPlayerRef = useRef(null); // Trailer audio guide
 
+    // === STABLE REFS for mutable state (prevents stale closures in RAF) ===
+    const clipIndexRef = useRef(currentClipIndex);
+    const draftRef = useRef(draftSequence);
+    const isPlayingRef = useRef(isPlaying);
+    const isGeneratingRef = useRef(isGenerating);
+    const speedRef = useRef(speed);
+    const isMutedRef = useRef(isMuted);
+    const masterVolumeRef = useRef(masterVolume);
+
+    // Keep refs in sync
+    useEffect(() => { clipIndexRef.current = currentClipIndex; }, [currentClipIndex]);
+    useEffect(() => { draftRef.current = draftSequence; }, [draftSequence]);
+    useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+    useEffect(() => { isGeneratingRef.current = isGenerating; }, [isGenerating]);
+    useEffect(() => { speedRef.current = speed; }, [speed]);
+    useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+    useEffect(() => { masterVolumeRef.current = masterVolume; }, [masterVolume]);
+
     // Scrubber state
     const [globalProgress, setGlobalProgress] = useState(0); // 0 to 1
     const rafRef = useRef(null);
+    const flipLockRef = useRef(false); // Prevent double-flip
 
-    // Build pool
+    // Build pool (respects orientation filter from trailer settings)
     const pool = useMemo(() => {
         let p = getSortedFiles();
         if (explorerSelectedFiles.size > 0) {
             p = p.filter(f => explorerSelectedFiles.has(f.path));
         }
+        // Apply orientation filter from trailer settings
+        const orientFilter = trailerSettings.orientationFilter || 'all';
+        if (orientFilter !== 'all') {
+            p = p.filter(f => {
+                const w = f.width || 0;
+                const h = f.height || 0;
+                if (w === 0 && h === 0) return true; // No metadata, include
+                if (orientFilter === 'horizontal') return w > h;
+                if (orientFilter === 'vertical') return h > w;
+                if (orientFilter === 'square') return w === h;
+                return true;
+            });
+        }
         return p;
-    }, [explorerSelectedFiles, files]);
+    }, [explorerSelectedFiles, files, trailerSettings.orientationFilter]);
 
-    // Randomize entire pool (Flux All)    // Generator
+    // Generator
     const generateDraft = async () => {
         setIsGenerating(true);
         setIsPlaying(false);
@@ -139,8 +171,10 @@ export const TrailerView = () => {
         if (!draftSequence || draftSequence.length === 0) generateDraft();
     }, [trailerSettings]);
 
-    // Stable URL Cache Architecture
+    // === Stable URL Cache Architecture (using ref to prevent dependency loops) ===
     const [fileUrlCache, setFileUrlCache] = useState({});
+    const fileUrlCacheRef = useRef(fileUrlCache);
+    useEffect(() => { fileUrlCacheRef.current = fileUrlCache; }, [fileUrlCache]);
 
     const getFileObject = useCallback(async (path) => {
         const matchedFile = files.find(f => f.path === path);
@@ -148,18 +182,20 @@ export const TrailerView = () => {
         return null;
     }, [files]);
 
-    // Preloader effect: load ObjectURLs by specific clip ID so they persist across A/B toggles
+    // Preloader effect: load ObjectURLs by specific clip ID
+    // Uses ref for cache check to prevent dependency loop
     useEffect(() => {
         if (draftSequence.length === 0 || isGenerating) return;
 
         const currentClip = draftSequence[currentClipIndex];
         const nextClip = draftSequence[(currentClipIndex + 1) % draftSequence.length];
+        const nextNextClip = draftSequence[(currentClipIndex + 2) % draftSequence.length];
 
         let active = true;
 
         const ensureUrl = async (clip) => {
             if (!clip || clip.type !== 'video') return;
-            if (fileUrlCache[clip.id]) return;
+            if (fileUrlCacheRef.current[clip.id]) return; // Use ref instead of state
             try {
                 const fileObj = clip.fileHandle ? await clip.fileHandle.getFile() : await getFileObject(clip.path);
                 if (fileObj && active) {
@@ -171,16 +207,18 @@ export const TrailerView = () => {
 
         ensureUrl(currentClip);
         ensureUrl(nextClip);
+        ensureUrl(nextNextClip);
 
         return () => { active = false; };
-    }, [currentClipIndex, draftSequence, isGenerating, getFileObject, fileUrlCache]);
+    }, [currentClipIndex, draftSequence, isGenerating, getFileObject]); // Removed fileUrlCache dep
 
     // Cleanup obsolete URLs
     useEffect(() => {
         if (draftSequence.length === 0) return;
         const currentClip = draftSequence[currentClipIndex];
         const nextClip = draftSequence[(currentClipIndex + 1) % draftSequence.length];
-        const neededIds = [currentClip?.id, nextClip?.id].filter(Boolean);
+        const nextNextClip = draftSequence[(currentClipIndex + 2) % draftSequence.length];
+        const neededIds = [currentClip?.id, nextClip?.id, nextNextClip?.id].filter(Boolean);
         
         setFileUrlCache(prev => {
             let changed = false;
@@ -198,16 +236,55 @@ export const TrailerView = () => {
 
     const isActA = activeVideoRef.current === 'A';
     const activeClip = draftSequence[currentClipIndex] || null;
-    const nextClip = draftSequence[(currentClipIndex + 1) % draftSequence.length] || null;
+    const nextClipData = draftSequence[(currentClipIndex + 1) % draftSequence.length] || null;
 
-    const clipA = isActA ? activeClip : nextClip;
-    const clipB = isActA ? nextClip : activeClip;
+    const clipA = isActA ? activeClip : nextClipData;
+    const clipB = isActA ? nextClipData : activeClip;
 
     const urlCacheA = clipA ? fileUrlCache[clipA.id] : '';
     const urlCacheB = clipB ? fileUrlCache[clipB.id] : '';
 
+    // === FLIP: Advance to next clip ===
+    const handleClipEnd = useCallback(() => {
+        if (flipLockRef.current) return; // Prevent double-flip
+        flipLockRef.current = true;
 
-    // Animation Loop for Gapless Playback
+        const seq = draftRef.current;
+        const idx = clipIndexRef.current;
+        if (!seq || seq.length === 0) { flipLockRef.current = false; return; }
+
+        const nextIndex = (idx + 1) % seq.length;
+
+        // Guard: Only flip if the background video has data ready
+        const bgVid = activeVideoRef.current === 'A' ? videoBRef.current : videoARef.current;
+        if (bgVid && bgVid.readyState < 2) {
+            // Not ready yet — wait for canplay then flip
+            const waitAndFlip = () => {
+                bgVid.removeEventListener('canplay', waitAndFlip);
+                activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
+                setCurrentClipIndex(nextIndex);
+                flipLockRef.current = false;
+            };
+            bgVid.addEventListener('canplay', waitAndFlip, { once: true });
+            // Safety timeout: if canplay never fires (e.g., already ready), force flip after 500ms
+            setTimeout(() => {
+                bgVid.removeEventListener('canplay', waitAndFlip);
+                if (flipLockRef.current) {
+                    activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
+                    setCurrentClipIndex(nextIndex);
+                    flipLockRef.current = false;
+                }
+            }, 500);
+            return;
+        }
+
+        // Flip refs
+        activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
+        setCurrentClipIndex(nextIndex);
+        flipLockRef.current = false;
+    }, []); // No deps needed — uses refs
+
+    // === Animation Loop for Gapless Playback (uses refs for stability) ===
     useEffect(() => {
         if (!isPlaying || isGenerating || draftSequence.length === 0) {
             cancelAnimationFrame(rafRef.current);
@@ -215,18 +292,28 @@ export const TrailerView = () => {
         }
 
         const loop = () => {
-            const currentClip = draftSequence[currentClipIndex];
+            const seq = draftRef.current;
+            const idx = clipIndexRef.current;
+            if (!seq || seq.length === 0 || !isPlayingRef.current || isGeneratingRef.current) return;
+
+            const currentClip = seq[idx];
             const activeVid = activeVideoRef.current === 'A' ? videoARef.current : videoBRef.current;
             
             if (activeVid && currentClip && currentClip.type === 'video') {
                 const endSeconds = (currentClip.trimEndFrame || 0) / DEFAULT_FPS;
-                if (activeVid.currentTime >= endSeconds || activeVid.ended) {
+                const actualDuration = activeVid.duration;
+                // Video end sentinel: check both trim end AND actual video duration
+                // This prevents freeze when trimEndFrame exceeds real video length
+                const effectiveEnd = (actualDuration && actualDuration !== Infinity) 
+                    ? Math.min(endSeconds, actualDuration - 0.05) 
+                    : endSeconds;
+                if (activeVid.currentTime >= effectiveEnd || activeVid.ended) {
                     // FLIP!
                     handleClipEnd();
                 } else {
                     // Update global progress
                     const globalTime = currentClip.globalStart + Math.max(0, activeVid.currentTime - ((currentClip.trimStartFrame || 0) / DEFAULT_FPS));
-                    onGlobalProgress(globalTime / draftSequence.totalDuration);
+                    setGlobalProgress(globalTime / seq.totalDuration);
                 }
             }
             rafRef.current = requestAnimationFrame(loop);
@@ -235,27 +322,19 @@ export const TrailerView = () => {
         rafRef.current = requestAnimationFrame(loop);
 
         return () => cancelAnimationFrame(rafRef.current);
-    }, [isPlaying, isGenerating, currentClipIndex, draftSequence]);
+    }, [isPlaying, isGenerating, draftSequence, handleClipEnd]);
 
     const onGlobalProgress = useCallback((percent) => {
         setGlobalProgress(percent);
     }, []);
 
-    const handleClipEnd = useCallback(() => {
-        const nextIndex = (currentClipIndex + 1) % draftSequence.length;
-        // Flip refs
-        activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
-        setCurrentClipIndex(nextIndex);
-    }, [currentClipIndex, draftSequence]);
-
-    // Handle initial seek & play when clip index changes
-    // KEY FIX FOR 0ms FLASH: We ALSO pre-seek the BACKGROUND (hidden) video
-    // so it is already painted to the correct frame before it flips to visible.
+    // === Handle initial seek & play when clip index changes ===
+    // Uses 'seeked' event to ensure play() only fires after seek completes
     useEffect(() => {
         if (isGenerating || draftSequence.length === 0) return;
         const currentClip = draftSequence[currentClipIndex];
         const nextClipIndex = (currentClipIndex + 1) % draftSequence.length;
-        const nextClip = draftSequence[nextClipIndex];
+        const nextClipLocal = draftSequence[nextClipIndex];
         
         const activeVid = activeVideoRef.current === 'A' ? videoARef.current : videoBRef.current;
         const bgVid = activeVideoRef.current === 'A' ? videoBRef.current : videoARef.current;
@@ -264,73 +343,135 @@ export const TrailerView = () => {
         if (!targetUrl) return;
 
         if (activeVid && currentClip && currentClip.type === 'video') {
-            const clipSpeed = currentClip.speed || speed;
-            const clipMuted = currentClip.isMuted || isMuted;
+            const clipSpeed = currentClip.speed || speedRef.current;
+            const clipMuted = currentClip.isMuted || isMutedRef.current;
             const clipVol = currentClip.volume !== undefined ? currentClip.volume / 100 : 1;
 
-            const doPlay = () => {
+            const doSeekAndPlay = () => {
                 let startSeconds = (currentClip.trimStartFrame || 0) / DEFAULT_FPS;
                 let endSeconds = (currentClip.trimEndFrame || 0) / DEFAULT_FPS;
                 const len = endSeconds - startSeconds;
                 
                 const actualDuration = activeVid.duration;
                 if (actualDuration && actualDuration !== Infinity) {
-                    let maxStart = actualDuration - len;
+                    // CRITICAL FIX: Clamp trimEndFrame to actual video duration
+                    // This prevents the generator from setting trim ranges beyond the video
+                    if (endSeconds > actualDuration) {
+                        endSeconds = actualDuration;
+                        currentClip.trimEndFrame = endSeconds * DEFAULT_FPS;
+                        // Also adjust localDuration for progress calculation
+                        const newLen = endSeconds - startSeconds;
+                        if (newLen > 0) {
+                            currentClip.localDuration = newLen;
+                        }
+                    }
+                    let maxStart = actualDuration - Math.min(len, actualDuration);
                     if (maxStart < 0) maxStart = 0;
                     if (startSeconds > maxStart) {
                         startSeconds = Math.random() * maxStart;
                         currentClip.trimStartFrame = startSeconds * DEFAULT_FPS;
-                        currentClip.trimEndFrame = (startSeconds + len) * DEFAULT_FPS;
+                        currentClip.trimEndFrame = Math.min((startSeconds + len) * DEFAULT_FPS, actualDuration * DEFAULT_FPS);
                     }
                 }
 
-                if (activeVid.currentTime < startSeconds - 0.1 || activeVid.currentTime > endSeconds + 0.1) {
-                   activeVid.currentTime = startSeconds;
-                }
-                activeVid.volume = clipMuted ? 0 : (masterVolume * clipVol);
+                activeVid.volume = clipMuted ? 0 : (masterVolumeRef.current * clipVol);
                 activeVid.playbackRate = clipSpeed;
-                if (isPlaying) activeVid.play().catch(() => {});
-                else activeVid.pause();
+
+                const needsSeek = Math.abs(activeVid.currentTime - startSeconds) > 0.1;
+
+                if (needsSeek) {
+                    // Wait for seek to complete before playing
+                    const onSeeked = () => {
+                        activeVid.removeEventListener('seeked', onSeeked);
+                        if (isPlayingRef.current) {
+                            activeVid.play().catch(() => {});
+                        }
+                    };
+                    activeVid.addEventListener('seeked', onSeeked, { once: true });
+                    activeVid.currentTime = startSeconds;
+                } else {
+                    // Already at the right position
+                    if (isPlayingRef.current) {
+                        activeVid.play().catch(() => {});
+                    } else {
+                        activeVid.pause();
+                    }
+                }
             };
 
             if (activeVid.readyState >= 1) {
-                doPlay();
+                doSeekAndPlay();
             } else {
-                activeVid.onloadedmetadata = () => {
-                    doPlay();
-                    activeVid.onloadedmetadata = null;
-                };
+                activeVid.addEventListener('loadedmetadata', () => doSeekAndPlay(), { once: true });
             }
         }
 
         // PRE-SEEK BACKGROUND VIDEO while it is still hidden
-        // so the first frame is already painted when it flips to active.
-        if (bgVid && nextClip && nextClip.type === 'video') {
+        if (bgVid && nextClipLocal && nextClipLocal.type === 'video') {
             const bgUrl = activeVideoRef.current === 'A' ? urlCacheB : urlCacheA;
             if (bgUrl) {
                 const preSeek = () => {
-                    const bgStart = (nextClip.trimStartFrame || 0) / DEFAULT_FPS;
+                    const bgStart = (nextClipLocal.trimStartFrame || 0) / DEFAULT_FPS;
                     const actualBgDuration = bgVid.duration;
                     let safeStart = bgStart;
                     if (actualBgDuration && actualBgDuration !== Infinity) {
-                        const bgLen = ((nextClip.trimEndFrame || 0) - (nextClip.trimStartFrame || 0)) / DEFAULT_FPS;
+                        const bgLen = ((nextClipLocal.trimEndFrame || 0) - (nextClipLocal.trimStartFrame || 0)) / DEFAULT_FPS;
                         const maxBgStart = Math.max(0, actualBgDuration - bgLen);
                         if (safeStart > maxBgStart) {
                             safeStart = Math.random() * maxBgStart;
-                            // Preemptively correct the clip trim so they aren't rerolled later and cause flashes
-                            nextClip.trimStartFrame = safeStart * DEFAULT_FPS;
-                            nextClip.trimEndFrame = (safeStart + bgLen) * DEFAULT_FPS;
+                            nextClipLocal.trimStartFrame = safeStart * DEFAULT_FPS;
+                            nextClipLocal.trimEndFrame = (safeStart + bgLen) * DEFAULT_FPS;
                         }
                     }
                     bgVid.currentTime = safeStart;
-                    bgVid.volume = 0; // Keep silent until it flips
-                    bgVid.pause(); // Ensure browser doesn't try to play it
+                    bgVid.volume = 0;
+                    bgVid.pause();
                 };
                 if (bgVid.readyState >= 1) preSeek();
-                else bgVid.onloadedmetadata = () => { preSeek(); bgVid.onloadedmetadata = null; };
+                else bgVid.addEventListener('loadedmetadata', () => preSeek(), { once: true });
             }
         }
-    }, [currentClipIndex, isPlaying, isGenerating, draftSequence]); // Removed volume, isMuted, speed to prevent looping
+    }, [currentClipIndex, isPlaying, isGenerating, draftSequence]);
+
+    // === Stall recovery: if video stalls during playback, auto-retry play ===
+    useEffect(() => {
+        const vidA = videoARef.current;
+        const vidB = videoBRef.current;
+
+        const handleStall = (vid) => () => {
+            if (isPlayingRef.current && !isGeneratingRef.current) {
+                // Retry play after a brief pause
+                setTimeout(() => {
+                    if (vid && vid.paused && isPlayingRef.current) {
+                        vid.play().catch(() => {});
+                    }
+                }, 100);
+            }
+        };
+
+        const stallA = handleStall(vidA);
+        const stallB = handleStall(vidB);
+
+        if (vidA) {
+            vidA.addEventListener('waiting', stallA);
+            vidA.addEventListener('stalled', stallA);
+        }
+        if (vidB) {
+            vidB.addEventListener('waiting', stallB);
+            vidB.addEventListener('stalled', stallB);
+        }
+
+        return () => {
+            if (vidA) {
+                vidA.removeEventListener('waiting', stallA);
+                vidA.removeEventListener('stalled', stallA);
+            }
+            if (vidB) {
+                vidB.removeEventListener('waiting', stallB);
+                vidB.removeEventListener('stalled', stallB);
+            }
+        };
+    }, [draftSequence]); // Re-attach when sequence changes
 
     // Separate effect for volume/speed/mute changes mid-playback
     useEffect(() => {
@@ -375,7 +516,18 @@ export const TrailerView = () => {
     // Handle Play/Pause
     const togglePlay = (e) => {
         if(e) e.stopPropagation();
-        setIsPlaying(!isPlaying);
+        const nextPlaying = !isPlaying;
+        setIsPlaying(nextPlaying);
+
+        // Immediately play/pause the active video element
+        const activeVid = activeVideoRef.current === 'A' ? videoARef.current : videoBRef.current;
+        if (activeVid) {
+            if (nextPlaying) {
+                activeVid.play().catch(() => {});
+            } else {
+                activeVid.pause();
+            }
+        }
     };
 
     const handleStop = (e) => {
@@ -387,6 +539,7 @@ export const TrailerView = () => {
         if(activeVid) {
             const startSeconds = (draftSequence[0]?.trimStartFrame || 0) / DEFAULT_FPS;
             activeVid.currentTime = startSeconds;
+            activeVid.pause();
         }
     };
 
@@ -429,7 +582,6 @@ export const TrailerView = () => {
         // If index changes, we update the state and the effects handle the rest
         if (foundIndex !== currentClipIndex) {
             setCurrentClipIndex(foundIndex);
-            // We need a tiny timeout so the new video has time to be set as the active ref before we seek it
             setTimeout(() => {
                 const activeVid = activeVideoRef.current === 'A' ? videoARef.current : videoBRef.current;
                 if (activeVid) activeVid.currentTime = targetLocalTime;
@@ -438,7 +590,6 @@ export const TrailerView = () => {
             const activeVid = activeVideoRef.current === 'A' ? videoARef.current : videoBRef.current;
             if (activeVid) {
                 activeVid.currentTime = targetLocalTime;
-                // Force progress update instantly so scrubber doesn't snap back a frame before raf loops
                 setGlobalProgress(percent);
             }
         }
@@ -473,7 +624,6 @@ export const TrailerView = () => {
             };
 
             if (trailerSettings.matchAudioDuration || trailerSettings.audioTimelineStrategy === 'fade') {
-                // One static clip that just dies
                 audioTracks.push({
                     ...baseAudio,
                     id: uuidv4(),
@@ -484,7 +634,6 @@ export const TrailerView = () => {
                     trimEndFrame: Math.round(endSecs * DEFAULT_FPS)
                 });
             } else if (trailerSettings.audioTimelineStrategy === 'continue') {
-                // One clip that continues past the bracket until target duration
                 const endCapSecs = startSecs + targetSecs;
                 audioTracks.push({
                     ...baseAudio,
@@ -496,7 +645,6 @@ export const TrailerView = () => {
                     trimEndFrame: Math.round(endCapSecs * DEFAULT_FPS)
                 });
             } else if (trailerSettings.audioTimelineStrategy === 'loop') {
-                // Mathematically drop looped instances back to back
                 const targetFrames = Math.round(targetSecs * DEFAULT_FPS);
                 const segmentFrames = Math.round(segmentSecs * DEFAULT_FPS);
                 let currStart = 0;
@@ -529,15 +677,15 @@ export const TrailerView = () => {
             name: `Trailer - ${new Date().toLocaleTimeString()}`,
             clips: allClips,
             createdAt: new Date().toISOString(),
-            thumbnailPath // Include thumbnail for EditsTab UI
+            thumbnailPath
         });
         
         nukeLibrary();
         setClips(allClips);
         setActiveTab('edits');
         if (document.fullscreenElement) document.exitFullscreen();
-        setAppViewMode('editor');
-        clearTrailerDraftSequence(); // Purge the generator draft to finalize handover
+        setAppViewMode('trailer');
+        clearTrailerDraftSequence();
     };
 
     return (
@@ -674,11 +822,37 @@ export const TrailerView = () => {
                                     {isMuted || masterVolume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
                                 </button>
                                 <input 
-                                    type="range" min="0" max="1" step="0.05"
+                                    type="range" min="0" max="4" step="0.05"
                                     value={isMuted ? 0 : masterVolume}
                                     onChange={(e) => { setMasterVolume(Number(e.target.value)); setIsMuted(false); }}
                                     className="w-20 h-1.5 accent-white bg-white/20 rounded-full appearance-none cursor-pointer"
                                 />
+                                <span className={clsx("text-[9px] font-mono font-bold min-w-[28px]", masterVolume > 1 ? "text-orange-400" : "text-white/40")}>
+                                    {Math.round(masterVolume * 100)}%
+                                </span>
+                            </div>
+
+                            {/* Orientation Filter Pills */}
+                            <div className="flex items-center gap-1 ml-3 bg-white/5 rounded-full p-0.5">
+                                {[
+                                    { id: 'all', label: 'All' },
+                                    { id: 'horizontal', label: 'Wide' },
+                                    { id: 'vertical', label: 'Tall' },
+                                    { id: 'square', label: 'Sq' }
+                                ].map(o => (
+                                    <button
+                                        key={o.id}
+                                        onClick={() => updateTrailerSettings({ orientationFilter: o.id })}
+                                        className={clsx(
+                                            "text-[8px] font-bold uppercase px-2 py-0.5 rounded-full transition-all",
+                                            trailerSettings.orientationFilter === o.id
+                                                ? "bg-white/20 text-white shadow-inner"
+                                                : "text-white/30 hover:text-white/60"
+                                        )}
+                                    >
+                                        {o.label}
+                                    </button>
+                                ))}
                             </div>
                             
                             <div className="text-xs font-mono text-white/50 ml-2">

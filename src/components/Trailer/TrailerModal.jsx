@@ -2,15 +2,76 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Wand2, X, Clock, Zap, Settings2, Video, Image as ImageIcon, Flame, Scissors, Check, PlayCircle, FolderMinus, ChevronDown, ChevronRight, Layers, Music, Upload, Play, Pause, Trash2, Dna, Loader2 } from 'lucide-react';
+import { Wand2, X, Clock, Zap, Settings2, Video, Image as ImageIcon, Flame, Scissors, Check, PlayCircle, FolderMinus, ChevronDown, ChevronRight, Layers, Music, Upload, Play, Pause, Trash2, Dna, Loader2, Crown, Sparkles, Shuffle, Grid3X3, Monitor, Smartphone, Square as SquareIcon } from 'lucide-react';
 import { analyzeAudio } from '../../utils/editorUtils/audioAnalysis';
+import { TRANSITION_PRESETS } from '@mmm-pro/lib/transitions';
+import { DEFAULT_STYLE_CONFIG } from '@mmm-pro/lib/trailerGenerator';
 
 const TEMPLATES = [
     { id: 'social', name: 'Social Cuts', desc: '0.1s - 0.5s cuts', icon: Zap, settings: { shortestClip: 0.1, longestClip: 0.5, allowDuplicates: true } },
     { id: 'kinetic', name: 'Kinetic Pulse', desc: 'Ultra-fast 0.1s-0.3s', icon: Flame, settings: { shortestClip: 0.1, longestClip: 0.3, allowDuplicates: true } },
     { id: 'epic', name: 'Epic Trailer', desc: 'Dramatic 0.5s-2.0s', icon: Wand2, settings: { shortestClip: 0.5, longestClip: 2.0, allowDuplicates: false } },
     { id: 'gym', name: 'Workout Edit', desc: 'Paced 0.2s-0.8s', icon: Video, settings: { shortestClip: 0.2, longestClip: 0.8, allowDuplicates: true } },
+    { id: 'wedding', name: 'Wedding', desc: 'Elegant 1.0s-3.0s', icon: Wand2, settings: { shortestClip: 1.0, longestClip: 3.0, allowDuplicates: false } },
+    { id: 'hyperlapse', name: 'Hyperlapse', desc: 'Fast flow 0.15s-0.4s', icon: Zap, settings: { shortestClip: 0.15, longestClip: 0.4, allowDuplicates: true } },
+    { id: 'filmscore', name: 'Film Score', desc: 'Breathing 1.5s-4.0s', icon: Video, settings: { shortestClip: 1.5, longestClip: 4.0, allowDuplicates: false } },
+    { id: 'montage', name: 'Montage', desc: 'Mixed 0.3s-1.5s', icon: Flame, settings: { shortestClip: 0.3, longestClip: 1.5, allowDuplicates: true } },
+    { id: 'vlog', name: 'Vlog Recap', desc: 'Story 0.8s-2.5s', icon: Video, settings: { shortestClip: 0.8, longestClip: 2.5, allowDuplicates: false } },
     { id: 'custom', name: 'Custom', desc: 'Manual boundaries', icon: Settings2, settings: null }
+];
+
+const GODMODE_TIERS = [
+    { label: 'Simple', color: 'text-emerald-400', bg: 'bg-emerald-500' },
+    { label: 'Moderate', color: 'text-sky-400', bg: 'bg-sky-500' },
+    { label: 'High Energy', color: 'text-amber-400', bg: 'bg-amber-500' },
+    { label: 'Maximum Chaos', color: 'text-red-400', bg: 'bg-red-500' },
+];
+
+const GODMODE_PRESETS = [
+    // ── Simple / Minimal ──
+    { id: 'gm-clean-cut', name: 'Clean Cut', icon: Scissors, desc: 'Straight cuts, zero effects',
+      pacing: 'montage', slowmo: 'none', duration: 30, tier: 0 },
+    { id: 'gm-slideshow', name: 'Slideshow', icon: Video, desc: 'Long elegant holds, no ramps',
+      pacing: 'filmscore', slowmo: 'none', duration: 60, tier: 0 },
+    { id: 'gm-soft-story', name: 'Soft Story', icon: Video, desc: 'Gentle vlog pacing, no effects',
+      pacing: 'vlog', slowmo: 'none', duration: 45, tier: 0 },
+    { id: 'gm-quick-recap', name: 'Quick Recap', icon: Zap, desc: 'Fast straight cuts, no styling',
+      pacing: 'social', slowmo: 'none', duration: 15, tier: 0 },
+    // ── Moderate ──
+    { id: 'gm-gentle-zoom', name: 'Gentle Zoom', icon: Video, desc: 'Soft zooms, cinematic pace',
+      pacing: 'filmscore', slowmo: 'breathe', duration: 60, tier: 1 },
+    { id: 'gm-wedding', name: 'Wedding Film', icon: Wand2, desc: 'Elegant slow zooms + gentle ramps',
+      pacing: 'wedding', slowmo: 'breathe', duration: 45, tier: 1 },
+    { id: 'gm-montage-mix', name: 'Montage Mix', icon: Flame, desc: 'Mixed pacing, light rubber-band',
+      pacing: 'montage', slowmo: 'mixed-slow', duration: 30, tier: 1 },
+    { id: 'gm-photo-reel', name: 'Photo Reel', icon: ImageIcon, desc: 'Slow paced, dreamy mixed media',
+      pacing: 'wedding', slowmo: 'ramped-inverse', duration: 45, tier: 1 },
+    { id: 'gm-travel-diary', name: 'Travel Diary', icon: Video, desc: 'Vlog pacing + soft dreamy effects',
+      pacing: 'vlog', slowmo: 'ramped-inverse', duration: 30, tier: 1 },
+    // ── High Energy ──
+    { id: 'gm-music-video', name: 'Music Video', icon: Music, desc: 'Beat-sync boomerangs + zoom ramps',
+      pacing: 'social', slowmo: 'pulse', duration: 30, tier: 2 },
+    { id: 'gm-action-trailer', name: 'Action Trailer', icon: Flame, desc: 'Dramatic pacing, hard speed ramps',
+      pacing: 'epic', slowmo: 'dramatic', duration: 60, tier: 2 },
+    { id: 'gm-instagram', name: 'IG Epic Edit', icon: Video, desc: 'Vertical-ready snappy cuts + zoom',
+      pacing: 'social', slowmo: 'mixed-fast', duration: 15, tier: 2 },
+    { id: 'gm-boomerang', name: 'Boomerang Edit', icon: Zap, desc: 'Full boomerang + stutter chaos',
+      pacing: 'kinetic', slowmo: 'slowmo-fast', duration: 15, tier: 2 },
+    { id: 'gm-hyperlapse', name: 'Hyperlapse Reel', icon: Zap, desc: 'Fast flow + pulse drops',
+      pacing: 'hyperlapse', slowmo: 'pulse', duration: 20, tier: 2 },
+    { id: 'gm-cinematic', name: 'Cinematic Short', icon: Video, desc: 'Film-score pacing + noir style',
+      pacing: 'filmscore', slowmo: 'ramped', duration: 90, tier: 2 },
+    { id: 'gm-gym-pump', name: 'Gym Pump', icon: Flame, desc: 'Workout pacing + pulse-drop effects',
+      pacing: 'gym', slowmo: 'pulse', duration: 20, tier: 2 },
+    // ── Maximum Chaos ──
+    { id: 'gm-tiktok', name: 'TikTok Viral', icon: Zap, desc: 'Maximum chaos, every effect at once',
+      pacing: 'kinetic', slowmo: 'mixed-all', duration: 10, tier: 3 },
+    { id: 'gm-whiplash', name: 'Whiplash Cut', icon: Flame, desc: 'Extreme speed contrast on every clip',
+      pacing: 'kinetic', slowmo: 'slowmo-fast', duration: 15, tier: 3 },
+    { id: 'gm-stutter-storm', name: 'Stutter Storm', icon: Zap, desc: 'Rapid micro-boomerangs everywhere',
+      pacing: 'kinetic', slowmo: 'fast-slowmo', duration: 10, tier: 3 },
+    { id: 'gm-sensory-overload', name: 'Sensory Overload', icon: Zap, desc: 'Every effect, hyperlapse pacing',
+      pacing: 'hyperlapse', slowmo: 'mixed-all', duration: 15, tier: 3 },
 ];
 
 const SliderControl = ({ label, icon: Icon, value, min, max, step, onChange, unit = 's', disabled = false }) => (
@@ -174,6 +235,8 @@ const WaveformVisualizer = ({ duration, peaks, start, end }) => {
 
 const TrailerModal = ({ isEmbedded = false }) => {
     const [showExclusions, setShowExclusions] = React.useState(false);
+    const [godMode, setGodMode] = React.useState(false);
+    const [godModeDuration, setGodModeDuration] = React.useState(30);
     const [audioFile, setAudioFile] = React.useState(null);
     const [audioUrl, setAudioUrl] = React.useState(null);
     const [audioPlaying, setAudioPlaying] = React.useState(false);
@@ -331,6 +394,43 @@ const TrailerModal = ({ isEmbedded = false }) => {
         setTrailerModalOpen(false);
         if (isEmbedded) {
             setTrailerDraftSequence([]); // Trigger Router to mount TrailerView
+        } else {
+            setTrailerDraftSequence([]);
+            setAppViewMode('trailer');
+        }
+    };
+
+    const handleGodModeGenerate = (preset) => {
+        const pacingTmpl = TEMPLATES.find(t => t.id === preset.pacing);
+        const finalSettings = {
+            template: preset.pacing,
+            targetDuration: godModeDuration,
+            allowDuplicates: true,
+            useAllClips: true,
+            slowmoPolicy: preset.slowmo || 'none',
+            // === Pro Engine fields from God Mode ===
+            editingStyleMix: preset.tier >= 2 ? 'heavy' : preset.tier >= 1 ? 'light' : 'none',
+            editingStyles: preset.tier >= 2 ? ['rubber-band-standard', 'rubber-band-zoom', 'multi-boomerang', 'triple-shot'] : ['rubber-band-standard', 'multi-boomerang'],
+            styleConfig: { ...DEFAULT_STYLE_CONFIG },
+            transitionsEnabled: preset.tier >= 1,
+            transitionPreset: preset.tier >= 3 ? 'dynamic' : preset.tier >= 2 ? 'kinetic' : 'cinematic',
+            maxSimultaneousTransitions: preset.tier >= 3 ? 3 : 1,
+            beatPattern: 'auto',
+            beatSyncStrategy: 'auto',
+            ...(pacingTmpl?.settings || {}),
+            ...(trailerSettings.useAudioGuide ? {
+                useAudioGuide: true,
+                audioFile: trailerSettings.audioFile,
+                audioUrl: trailerSettings.audioUrl,
+                audioTrimStart,
+                audioTrimEnd,
+            } : {}),
+        };
+        setTrailerSettings(finalSettings);
+        // Trigger generation immediately
+        setTrailerModalOpen(false);
+        if (isEmbedded) {
+            setTrailerDraftSequence([]);
         } else {
             setTrailerDraftSequence([]);
             setAppViewMode('trailer');
@@ -514,6 +614,73 @@ const TrailerModal = ({ isEmbedded = false }) => {
                         )}
                     </div>
 
+                    {/* ═══ GOD MODE PANEL ═══ */}
+                    <div className={clsx("border rounded-xl overflow-hidden transition-all", godMode ? "border-yellow-500/30" : "border-white/5")}>
+                        <button onClick={() => setGodMode(!godMode)}
+                            className={clsx("w-full flex items-center justify-between px-5 py-4 transition-all",
+                                godMode ? "bg-gradient-to-r from-yellow-900/30 to-amber-900/20" : "bg-black/20 hover:bg-white/5")}>
+                            <div className="flex items-center gap-3">
+                                <Crown size={18} className={clsx(godMode ? "text-yellow-400" : "text-white/30")} />
+                                <div className="flex flex-col items-start">
+                                    <div className={clsx("text-sm font-black uppercase tracking-wider", godMode ? "text-yellow-200" : "text-white/60")}>God Mode</div>
+                                    <div className="text-[9px] text-white/30">One-click pro-grade presets — skip manual config</div>
+                                </div>
+                            </div>
+                            <div className={clsx("w-10 h-5 rounded-full transition-colors relative", godMode ? "bg-yellow-500" : "bg-black border border-white/20")}>
+                                <div className={clsx("w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform", godMode ? "translate-x-5" : "translate-x-0.5")} />
+                            </div>
+                        </button>
+
+                        {godMode && (
+                            <div className="p-5 border-t border-yellow-500/20 space-y-5 bg-gradient-to-b from-yellow-900/10 to-transparent">
+                                {/* Duration Slider */}
+                                <SliderControl label="Target Duration" icon={Clock} value={godModeDuration}
+                                    min={5} max={180} step={5} unit="s" onChange={v => setGodModeDuration(v)} />
+                                <div className="flex gap-2 flex-wrap">
+                                    {[5, 10, 15, 30, 60, 90].map(val => (
+                                        <button key={val} onClick={() => setGodModeDuration(val)}
+                                            className={clsx("px-3 py-1.5 rounded-md text-[10px] font-bold transition-all border",
+                                                godModeDuration === val ? "bg-yellow-500 text-black border-yellow-400 shadow-lg" : "bg-white/5 text-white/50 border-white/10 hover:bg-white/10")}>
+                                            {val}s
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Tier Preset Grid */}
+                                {GODMODE_TIERS.map((tier, tierIdx) => {
+                                    const tierPresets = GODMODE_PRESETS.filter(p => p.tier === tierIdx);
+                                    return (
+                                        <div key={tier.label} className="space-y-2">
+                                            <div className={clsx("text-[10px] font-black uppercase tracking-widest flex items-center gap-2", tier.color)}>
+                                                <div className={clsx("w-2 h-2 rounded-full", tier.bg)} />
+                                                {tier.label}
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {tierPresets.map(preset => {
+                                                    const Icon = preset.icon;
+                                                    return (
+                                                        <button key={preset.id}
+                                                            onClick={() => handleGodModeGenerate(preset)}
+                                                            className="flex flex-col gap-1.5 p-3 text-left rounded-lg transition-all border border-white/5 bg-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 group active:scale-95">
+                                                            <div className="flex items-center gap-2">
+                                                                <Icon size={14} className={clsx("text-white/40 group-hover:text-yellow-400 transition-colors")} />
+                                                                <span className="text-[11px] font-bold text-white/80 group-hover:text-yellow-200 truncate">{preset.name}</span>
+                                                            </div>
+                                                            <span className="text-[9px] text-white/30 leading-tight">{preset.desc}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Manual controls disabled overlay when God Mode active */}
+                    <div className={clsx(godMode && "opacity-30 pointer-events-none select-none")}>
+
                     {/* Generator Templates */}
                     <div className="space-y-3 shrink-0">
                         <label className="text-[10px] font-black uppercase tracking-widest text-white/40 flex justify-between">
@@ -622,10 +789,191 @@ const TrailerModal = ({ isEmbedded = false }) => {
                             onChange={(e) => setTrailerSettings({ slowmoPolicy: e.target.value })}
                             className="w-full bg-black/50 border border-white/10 text-white text-xs font-bold rounded-md px-3 py-2.5 outline-none hover:bg-white/5 cursor-pointer transition-colors"
                         >
-                            <option className="bg-black text-white" value="none">Normal Speed (1.0x)</option>
-                            <option className="bg-black text-white" value="mixed">Mixed Action (Random Occasional Slow-Mo)</option>
-                            <option className="bg-black text-white" value="all">Cinematic Wash (All Clips 0.5x)</option>
+                            <optgroup label="Standard">
+                                <option className="bg-black text-white" value="none">Normal Speed (1.0x)</option>
+                                <option className="bg-black text-white" value="slowmo">Slow Motion (0.5x)</option>
+                                <option className="bg-black text-white" value="fast">Fast (1.5x)</option>
+                                <option className="bg-black text-white" value="timelapse">Timelapse (2.5x)</option>
+                                <option className="bg-black text-white" value="hyperfast">Hyperfast (4.0x)</option>
+                            </optgroup>
+                            <optgroup label="Mixed">
+                                <option className="bg-black text-white" value="mixed-slow">Mixed Slow (Random Occasional Slow-Mo)</option>
+                                <option className="bg-black text-white" value="mixed-fast">Mixed Fast (Random Occasional Speed-Up)</option>
+                                <option className="bg-black text-white" value="mixed-all">Mixed All (Random Slow + Fast)</option>
+                                <option className="bg-black text-white" value="slowmo-fast">Slow→Fast Bias (75% Slow, 25% Fast)</option>
+                                <option className="bg-black text-white" value="fast-slowmo">Fast→Slow Bias (75% Fast, 25% Slow)</option>
+                            </optgroup>
+                            <optgroup label="Dynamic Curves">
+                                <option className="bg-black text-white" value="dramatic">Dramatic Build (Slow → Fast)</option>
+                                <option className="bg-black text-white" value="dramatic-reverse">Dramatic Reverse (Fast → Slow)</option>
+                                <option className="bg-black text-white" value="ramped">Ramped Arc (Fast → Slow → Fast)</option>
+                                <option className="bg-black text-white" value="ramped-inverse">Ramped Inverse (Slow → Fast → Slow)</option>
+                                <option className="bg-black text-white" value="pulse">Pulse (Alternating 0.5x / 1.8x)</option>
+                                <option className="bg-black text-white" value="breathe">Breathe (Gentle 0.7x ↔ 1.3x wave)</option>
+                            </optgroup>
                         </select>
+                    </div>
+
+                    {/* ═══ EDITING STYLES ENGINE (from Pro) ═══ */}
+                    <div className="border border-white/5 rounded-xl overflow-hidden bg-black/20">
+                        <button onClick={() => setTrailerSettings({ _showStylesPanel: !trailerSettings._showStylesPanel })}
+                            className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 transition-colors">
+                            <div className="flex items-center gap-2">
+                                <Sparkles size={16} className={clsx(trailerSettings.editingStyleMix !== 'none' ? 'text-cyan-400' : 'text-white/30')} />
+                                <span className="text-sm font-bold text-white">Editing Styles</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {trailerSettings.editingStyleMix !== 'none' && (
+                                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">
+                                        {trailerSettings.editingStyleMix}
+                                    </span>
+                                )}
+                                {trailerSettings._showStylesPanel ? <ChevronDown size={16} className="text-white/50" /> : <ChevronRight size={16} className="text-white/50" />}
+                            </div>
+                        </button>
+                        {trailerSettings._showStylesPanel && (
+                            <div className="p-4 border-t border-white/5 space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Style Intensity</label>
+                                    <div className="flex bg-white/5 rounded-lg p-1 border border-white/5">
+                                        {[{ id: 'none', label: 'Off' }, { id: 'light', label: 'Light (20%)' }, { id: 'heavy', label: 'Heavy (50%)' }, { id: 'every', label: 'Every Clip' }].map(opt => (
+                                            <button key={opt.id}
+                                                onClick={() => setTrailerSettings({ editingStyleMix: opt.id })}
+                                                className={clsx(
+                                                    'flex-1 py-2 px-2 rounded-md text-[10px] font-bold transition-all',
+                                                    trailerSettings.editingStyleMix === opt.id
+                                                        ? 'bg-cyan-500 text-white shadow-md'
+                                                        : 'text-white/40 hover:text-white hover:bg-white/5'
+                                                )}>{opt.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {trailerSettings.editingStyleMix !== 'none' && (
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Active Styles</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {[
+                                                { id: 'rubber-band-standard', name: 'Rubber Band', desc: 'Fast→Slow→Reverse' },
+                                                { id: 'rubber-band-zoom', name: 'Zoom Rubber', desc: 'Push-in + Pull-out' },
+                                                { id: 'rubber-band-zoom-speed', name: 'Zoom+Speed', desc: 'Combined ramp+zoom' },
+                                                { id: 'multi-boomerang', name: 'Boomerang', desc: 'Forward/reverse slices' },
+                                                { id: 'triple-shot', name: 'Triple Shot', desc: 'Burst of 3 sub-clips' },
+                                            ].map(style => {
+                                                const isActive = (trailerSettings.editingStyles || []).includes(style.id);
+                                                return (
+                                                    <button key={style.id}
+                                                        onClick={() => {
+                                                            const current = trailerSettings.editingStyles || [];
+                                                            setTrailerSettings({
+                                                                editingStyles: isActive
+                                                                    ? current.filter(s => s !== style.id)
+                                                                    : [...current, style.id]
+                                                            });
+                                                        }}
+                                                        className={clsx(
+                                                            'flex flex-col gap-1 p-3 rounded-lg border text-left transition-all',
+                                                            isActive ? 'bg-cyan-500/15 border-cyan-500/40' : 'bg-white/5 border-white/5 hover:border-white/20'
+                                                        )}>
+                                                        <span className={clsx('text-[11px] font-bold', isActive ? 'text-cyan-200' : 'text-white/70')}>{style.name}</span>
+                                                        <span className="text-[9px] text-white/30">{style.desc}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pt-2">
+                                            <SliderControl label="Zoom Range" icon={Zap}
+                                                value={trailerSettings.styleConfig?.zoomRange || 145}
+                                                min={110} max={200} step={5} unit="%"
+                                                onChange={v => setTrailerSettings({ styleConfig: { ...(trailerSettings.styleConfig || {}), zoomRange: v } })} />
+                                            <SliderControl label="Reversal Chance" icon={Shuffle}
+                                                value={trailerSettings.styleConfig?.reversalChance || 0.85}
+                                                min={0} max={1} step={0.05} unit=""
+                                                onChange={v => setTrailerSettings({ styleConfig: { ...(trailerSettings.styleConfig || {}), reversalChance: v } })} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ═══ TRANSITIONS ENGINE (from Pro) ═══ */}
+                    <div className="border border-white/5 rounded-xl overflow-hidden bg-black/20">
+                        <button onClick={() => setTrailerSettings({ _showTransitionsPanel: !trailerSettings._showTransitionsPanel })}
+                            className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 transition-colors">
+                            <div className="flex items-center gap-2">
+                                <Shuffle size={16} className={clsx(trailerSettings.transitionsEnabled ? 'text-violet-400' : 'text-white/30')} />
+                                <span className="text-sm font-bold text-white">Transitions</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {trailerSettings.transitionsEnabled && (
+                                    <span className="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">
+                                        {trailerSettings.transitionPreset || 'cinematic'}
+                                    </span>
+                                )}
+                                {trailerSettings._showTransitionsPanel ? <ChevronDown size={16} className="text-white/50" /> : <ChevronRight size={16} className="text-white/50" />}
+                            </div>
+                        </button>
+                        {trailerSettings._showTransitionsPanel && (
+                            <div className="p-4 border-t border-white/5 space-y-4">
+                                <label className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-white">Enable Transitions</span>
+                                    <div className="relative cursor-pointer" onClick={() => setTrailerSettings({ transitionsEnabled: !trailerSettings.transitionsEnabled })}>
+                                        <div className={clsx('w-10 h-5 rounded-full transition-colors', trailerSettings.transitionsEnabled ? 'bg-violet-500' : 'bg-black border border-white/20')}>
+                                            <div className={clsx('w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform', trailerSettings.transitionsEnabled ? 'translate-x-5' : 'translate-x-0.5')} />
+                                        </div>
+                                    </div>
+                                </label>
+                                {trailerSettings.transitionsEnabled && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Transition Preset</label>
+                                            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                                                {Object.keys(TRANSITION_PRESETS).map(preset => (
+                                                    <button key={preset}
+                                                        onClick={() => setTrailerSettings({ transitionPreset: preset })}
+                                                        className={clsx(
+                                                            'py-2 px-3 rounded-lg text-[10px] font-bold capitalize transition-all border',
+                                                            trailerSettings.transitionPreset === preset
+                                                                ? 'bg-violet-500/20 border-violet-500/50 text-violet-200'
+                                                                : 'bg-white/5 border-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                                                        )}>{preset}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <SliderControl label="Simultaneous FX" icon={Layers}
+                                            value={trailerSettings.maxSimultaneousTransitions || 1}
+                                            min={1} max={5} step={1} unit=""
+                                            onChange={v => setTrailerSettings({ maxSimultaneousTransitions: v })} />
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ═══ ORIENTATION FILTER (from Pro) ═══ */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 flex items-center gap-2">
+                            <Monitor size={12} className="text-sky-400" /> Orientation Filter
+                        </label>
+                        <div className="flex bg-white/5 rounded-lg p-1 border border-white/5">
+                            {[
+                                { id: 'all', label: 'All', icon: Grid3X3 },
+                                { id: 'horizontal', label: 'Landscape', icon: Monitor },
+                                { id: 'vertical', label: 'Portrait', icon: Smartphone },
+                                { id: 'square', label: 'Square', icon: SquareIcon },
+                            ].map(opt => (
+                                <button key={opt.id}
+                                    onClick={() => setTrailerSettings({ orientationFilter: opt.id })}
+                                    className={clsx(
+                                        'flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-[10px] font-bold transition-all',
+                                        trailerSettings.orientationFilter === opt.id
+                                            ? 'bg-sky-500 text-white shadow-md'
+                                            : 'text-white/40 hover:text-white hover:bg-white/5'
+                                    )}>
+                                    <opt.icon size={12} /> {opt.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Behavior Toggles */}
@@ -734,6 +1082,8 @@ const TrailerModal = ({ isEmbedded = false }) => {
                             </div>
                         )}
                     </div>
+
+                    </div>{/* end godMode disabled wrapper */}
 
                 </div>
 

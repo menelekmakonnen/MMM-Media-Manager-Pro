@@ -13,7 +13,7 @@ import GalleryView from './Views/GalleryView';
 import SlideshowView from './Views/SlideshowView';
 import EditorView from './Views/EditorView';
 import SettingsView from './Views/SettingsView';
-import StreamView from '../Stream/StreamView';
+import StudioView from '../Studio/StudioView';
 import { updateAppIcons } from '../../utils/LogoGenerator';
 import { useKeyboardBindings } from '../../hooks/useKeyboardBindings';
 import TrailerModal from '../Trailer/TrailerModal';
@@ -37,7 +37,7 @@ const MainContentPanel = () => {
     if (appViewMode === 'gallery') return <GalleryView />;
     if (appViewMode === 'settings') return <SettingsView />;
     if (appViewMode === 'trailer') return <TrailerRouter />;
-    if (appViewMode === 'stream') return <StreamView />;
+    if (appViewMode === 'studio') return <StudioView />;
 
     if (globalViewMode === 'fullGrid') return <FullGridView />;
     if (globalViewMode === 'folderGrid') return <FolderExplorer />;
@@ -63,6 +63,9 @@ const MainLayout = () => {
     React.useEffect(() => {
         document.body.setAttribute('data-theme', theme);
         document.body.setAttribute('data-mode', themeMode);
+
+        // Force correct window title for Windows taskbar
+        document.title = 'MMMedia Darkroom';
         
         // Update the dynamic SVG application icon and taskbar icon using the new computed accent color
         setTimeout(() => {
@@ -136,12 +139,8 @@ const MainLayout = () => {
                             )}
 
                             {/* Center + Right */}
-                            <Panel minSize={50} className="relative z-0 bg-[#050510]">
-                                {appViewMode === 'editor' ? (
-                                    <EditorView />
-                                ) : (
-                                    <MainContentPanel />
-                                )}
+                            <Panel minSize={50} className="relative z-0 bg-transparent">
+                                <MainContentPanel />
                             </Panel>
 
                             {/* Right Sidebar (Optional) */}
@@ -228,6 +227,23 @@ const MainLayout = () => {
                         >
                             <span>Make a Trailer</span>
                             <span>🪄</span>
+                        </button>
+                        <div className="h-px bg-white/10 my-1 mx-2" />
+                        {/* Open in Windows File Explorer */}
+                        <button 
+                            className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white transition-colors text-emerald-300 flex items-center justify-between"
+                            onClick={() => {
+                                const filePath = mediaContextMenu.file?.path || mediaContextMenu.file?.folderPath;
+                                if (filePath && window.electronAPI?.showItemInFolder) {
+                                    window.electronAPI.showItemInFolder(filePath);
+                                }
+                                setMediaContextMenu(null);
+                            }}
+                        >
+                            <span>Open in File Explorer</span>
+                            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.3" className="shrink-0">
+                                <path d="M2 5V13a1 1 0 001 1h10a1 1 0 001-1V7a1 1 0 00-1-1H8L6.5 4.5A1 1 0 005.8 4H3a1 1 0 00-1 1z" />
+                            </svg>
                         </button>
                     </div>
                 </div>

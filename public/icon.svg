@@ -1,5 +1,86 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="24" height="24" rx="6" fill="#0F172A"/>
-<circle cx="12" cy="12" r="6" stroke="#38BDF8" stroke-width="2"/>
-<path d="M15 12L10.5 14.5981L10.5 9.40192L15 12Z" fill="#38BDF8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181825"/>
+      <stop offset="50%" stop-color="#0d0d1a"/>
+      <stop offset="100%" stop-color="#050510"/>
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="ringGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#60a5fa"/>
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="45%" cy="42%" r="45%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.6"/>
+      <stop offset="40%" stop-color="#3b82f6" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ambientLight" cx="35%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="outerShadow">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
+    <filter id="ringGlow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="sensorGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="iconClip">
+      <rect x="32" y="32" width="448" height="448" rx="100"/>
+    </clipPath>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="100" fill="url(#bgGrad)" filter="url(#outerShadow)"/>
+  <rect x="32" y="32" width="448" height="448" rx="100" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1.5"/>
+
+  <g clip-path="url(#iconClip)">
+    <circle cx="256" cy="256" r="220" fill="url(#ambientLight)"/>
+    <circle cx="256" cy="256" r="200" fill="url(#coreGlow)"/>
+
+    <circle cx="256" cy="256" r="155" fill="none" stroke="url(#ringGrad)" stroke-width="10" filter="url(#ringGlow)" opacity="0.9"/>
+    <circle cx="256" cy="256" r="170" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="0.8"/>
+    <circle cx="256" cy="256" r="140" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+
+    <g transform="translate(256 256)" opacity="0.85">
+      <path d="M 0,-105 L 45,-68 L 25,-20 L -25,-20 L -45,-68 Z" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" transform="rotate(0)" opacity="0.7"/>
+      <path d="M 0,-105 L 45,-68 L 25,-20 L -25,-20 L -45,-68 Z" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" transform="rotate(60)" opacity="0.7"/>
+      <path d="M 0,-105 L 45,-68 L 25,-20 L -25,-20 L -45,-68 Z" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" transform="rotate(120)" opacity="0.7"/>
+      <path d="M 0,-105 L 45,-68 L 25,-20 L -25,-20 L -45,-68 Z" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" transform="rotate(180)" opacity="0.7"/>
+      <path d="M 0,-105 L 45,-68 L 25,-20 L -25,-20 L -45,-68 Z" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" transform="rotate(240)" opacity="0.7"/>
+      <path d="M 0,-105 L 45,-68 L 25,-20 L -25,-20 L -45,-68 Z" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" transform="rotate(300)" opacity="0.7"/>
+      <polygon points="0,-52 45,-26 45,26 0,52 -45,26 -45,-26" fill="rgba(0,0,0,0.3)" stroke="#3b82f6" stroke-width="1.5" opacity="0.6"/>
+    </g>
+
+    <circle cx="256" cy="256" r="95" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+
+    <circle cx="256" cy="256" r="38" fill="#3b82f6" opacity="0.95" filter="url(#sensorGlow)"/>
+    <circle cx="256" cy="256" r="28" fill="#1d4ed8" opacity="0.6"/>
+    <circle cx="256" cy="256" r="18" fill="#3b82f6" opacity="0.9"/>
+    <circle cx="268" cy="244" r="8" fill="white" opacity="0.85"/>
+    <circle cx="276" cy="236" r="3" fill="white" opacity="0.7"/>
+    <circle cx="242" cy="262" r="4" fill="white" opacity="0.3"/>
+
+    <ellipse cx="180" cy="180" rx="80" ry="30" transform="rotate(-30 180 180)" fill="white" opacity="0.03"/>
+    <path d="M 100 150 Q 256 80 412 150" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.06"/>
+
+    <line x1="256" y1="200" x2="256" y2="218" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+    <line x1="256" y1="294" x2="256" y2="312" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+    <line x1="200" y1="256" x2="218" y2="256" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+    <line x1="294" y1="256" x2="312" y2="256" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+  </g>
 </svg>

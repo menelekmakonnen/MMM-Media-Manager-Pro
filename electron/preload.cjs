@@ -32,7 +32,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Get any file that was passed on initial launch
     getOpenedFile: () => ipcRenderer.invoke('get-opened-file'),
     // Read an external file by absolute path (returns { name, path, size, mimeType, buffer })
-    readExternalFile: (filePath) => ipcRenderer.invoke('read-external-file', filePath)
+    readExternalFile: (filePath) => ipcRenderer.invoke('read-external-file', filePath),
+    // Scan a folder for all media files (returns array of { name, path, folderPath, size, lastModified, ext })
+    readFolderMedia: (folderPath) => ipcRenderer.invoke('read-folder-media', folderPath),
+    // Open a file/folder in Windows File Explorer
+    showItemInFolder: (filePath) => ipcRenderer.send('show-item-in-folder', filePath),
+
+    // ─── .mmm Project File Operations ───────────────────────────────
+    // Save project as .mmm file (shows Save dialog)
+    saveMMMProject: (content) => ipcRenderer.invoke('save-mmm-project', content),
+    // Load a .mmm project file (shows Open dialog)
+    loadMMMProject: () => ipcRenderer.invoke('load-mmm-project'),
+    // Listen for .mmm files opened via Windows "Open with" or drag-drop
+    onMMMFileOpened: (callback) => {
+        const listener = (_event, filePath) => callback(filePath);
+        ipcRenderer.on('open-mmm-file', listener);
+        return () => ipcRenderer.removeListener('open-mmm-file', listener);
+    }
 });
 
 contextBridge.exposeInMainWorld('ipcRenderer', {

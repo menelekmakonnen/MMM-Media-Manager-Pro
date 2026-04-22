@@ -38,6 +38,11 @@ const useProjectStore = create()(
       addEdit: (edit) => set((state) => ({ savedEdits: [...(state.savedEdits || []), edit] })),
       removeEdit: (editId) => set((state) => ({ savedEdits: (state.savedEdits || []).filter(e => e.id !== editId) })),
       loadEdits: (edits) => set({ savedEdits: edits }),
+      updateEditLastOpened: (editId) => set((state) => ({
+        savedEdits: (state.savedEdits || []).map(e =>
+          e.id === editId ? { ...e, lastOpenedAt: new Date().toISOString() } : e
+        )
+      })),
       setResolution: (preset) => set((state) => ({
         settings: {
           ...state.settings,

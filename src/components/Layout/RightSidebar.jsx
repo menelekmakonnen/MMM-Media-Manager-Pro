@@ -12,7 +12,7 @@ const formatBytes = (bytes, decimals = 2) => {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
-const FilterSection = ({ title, expanded = true, children }) => {
+const FilterSection = ({ title, expanded = false, children }) => {
     const [isExpanded, setIsExpanded] = useState(expanded);
     return (
         <div className="border-b border-white/5 last:border-0">
@@ -28,19 +28,35 @@ const FilterSection = ({ title, expanded = true, children }) => {
     );
 }
 
+// === Ctrl+Click Multi-Sort SortToggle ===
 const SortToggle = ({ field, label, icon: Icon }) => {
-    // Single Select Logic: Verify mutual exclusivity
     const { sortStack, setSortStack } = useMediaStore();
-    const activeSort = sortStack.find(s => s.field === field);
+    const stackIndex = sortStack.findIndex(s => s.field === field);
+    const isActive = stackIndex >= 0;
+    const isPrimary = stackIndex === 0;
+    const activeSort = isActive ? sortStack[stackIndex] : null;
 
-    // Check if this field is the primary (first) sort
-    const isPrimary = sortStack[0]?.field === field;
-
-    const handleClick = () => {
-        // Enforce single-select sort behavior as per UI (Radio button style)
-        // This calculates the new order (flip if already active) and sets it as the ONLY sort (replacing others)
-        const newOrder = activeSort?.order === 'asc' ? 'desc' : 'asc';
-        setSortStack([{ field, order: newOrder }]);
+    const handleClick = (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            // MULTI-SORT: Ctrl+Click to add/remove from stack
+            if (isActive) {
+                // Remove from stack (but don't remove the last one)
+                if (sortStack.length > 1) {
+                    setSortStack(sortStack.filter(s => s.field !== field));
+                } else {
+                    // Flip order on the last remaining sort
+                    const newOrder = activeSort.order === 'asc' ? 'desc' : 'asc';
+                    setSortStack([{ field, order: newOrder }]);
+                }
+            } else {
+                // Append to stack
+                setSortStack([...sortStack, { field, order: 'asc' }]);
+            }
+        } else {
+            // SINGLE-SORT: Normal click replaces the entire stack
+            const newOrder = activeSort?.order === 'asc' ? 'desc' : 'asc';
+            setSortStack([{ field, order: newOrder }]);
+        }
     };
 
     return (
@@ -48,16 +64,24 @@ const SortToggle = ({ field, label, icon: Icon }) => {
             onClick={handleClick}
             className={clsx(
                 "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all overflow-hidden group/btn",
-                isPrimary ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
+                isPrimary ? "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30" 
+                    : isActive ? "bg-white/10 text-white border border-white/15" 
+                    : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
             )}
-            title={label}
+            title={`${label} — Click to sort, Ctrl+Click to stack`}
         >
             <div className="flex items-center gap-2 flex-1 min-w-0">
+                {/* Stack position badge */}
+                {isActive && sortStack.length > 1 && (
+                    <span className="w-4 h-4 flex items-center justify-center bg-[var(--accent-primary)] text-white text-[8px] font-black rounded-full shrink-0">
+                        {stackIndex + 1}
+                    </span>
+                )}
                 {Icon && <Icon size={14} className="shrink-0" />}
                 <span className="font-medium truncate text-left">{label}</span>
             </div>
-            {isPrimary && (
-                <span className="text-[9px] font-mono bg-[var(--accent-primary)] text-white px-1 rounded shrink-0 ml-2">
+            {isActive && (
+                <span className={clsx("text-[9px] font-mono px-1 rounded shrink-0 ml-2", isPrimary ? "bg-[var(--accent-primary)] text-white" : "bg-white/20 text-white/70")}>
                     {activeSort?.order === 'asc' ? 'ASC' : 'DSC'}
                 </span>
             )}
@@ -65,13 +89,45 @@ const SortToggle = ({ field, label, icon: Icon }) => {
     );
 };
 
+// === Animated SVG Icon: Film Reel (for "All in Folder" trailer) ===
+const FilmReelIcon = ({ active, className }) => (
+    <svg viewBox="0 0 24 24" className={clsx("w-5 h-5 transition-all duration-300", className)} fill="none" stroke="currentColor" strokeWidth="1.5">
+        {/* Reel outer ring */}
+        <circle cx="12" cy="12" r="9" className="origin-center group-hover/reel:animate-[spin_2s_linear_infinite]" />
+        {/* Center hub */}
+        <circle cx="12" cy="12" r="2.5" fill="currentColor" className="opacity-60" />
+        {/* Film perforations */}
+        <circle cx="12" cy="5" r="1.2" fill="currentColor" className="opacity-40 group-hover/reel:opacity-80 transition-opacity" />
+        <circle cx="17.95" cy="8.5" r="1.2" fill="currentColor" className="opacity-40 group-hover/reel:opacity-80 transition-opacity delay-75" />
+        <circle cx="17.95" cy="15.5" r="1.2" fill="currentColor" className="opacity-40 group-hover/reel:opacity-80 transition-opacity delay-100" />
+        <circle cx="12" cy="19" r="1.2" fill="currentColor" className="opacity-40 group-hover/reel:opacity-80 transition-opacity delay-150" />
+        <circle cx="6.05" cy="15.5" r="1.2" fill="currentColor" className="opacity-40 group-hover/reel:opacity-80 transition-opacity delay-200" />
+        <circle cx="6.05" cy="8.5" r="1.2" fill="currentColor" className="opacity-40 group-hover/reel:opacity-80 transition-opacity delay-75" />
+    </svg>
+);
+
+// === Animated SVG Icon: Grid Mosaic (for "Active Grids" trailer) ===
+const GridMosaicIcon = ({ active, className }) => (
+    <svg viewBox="0 0 24 24" className={clsx("w-5 h-5 transition-all duration-300", className)} fill="none" stroke="currentColor" strokeWidth="1.5">
+        {/* Grid cells with stagger animation */}
+        <rect x="3" y="3" width="7" height="7" rx="1.5" className="fill-current opacity-20 group-hover/mosaic:opacity-60 transition-all duration-200" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" className="fill-current opacity-20 group-hover/mosaic:opacity-60 transition-all duration-200 delay-75" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" className="fill-current opacity-20 group-hover/mosaic:opacity-60 transition-all duration-200 delay-100" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" className="fill-current opacity-20 group-hover/mosaic:opacity-60 transition-all duration-200 delay-150" />
+        {/* Stroke borders */}
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+);
+
 const RightSidebar = () => {
     const {
         getSortedFiles,
         theme, setTheme,
         metadataFilters, setMetadataFilters,
         shuffleFiles, sortStack, favoritesOnly, setFavoritesOnly,
-        showJumpButtons, toggleJumpButtons,
         // Grid Options
         gridColumns, gridRows, threeGridEqual,
         toggleDual, toggleTriple, toggleQuad, toggleSix, toggleNine, toggleTwelve, setGridLayout,
@@ -81,12 +137,10 @@ const RightSidebar = () => {
 
     // Compute what's in the active grids for the "active grids" trailer button
     const handleTrailerWithFolder = () => {
-        // Standard behavior — use all videos in the current folder/selection
         setTrailerModalOpen(true);
     };
 
     const handleTrailerWithGrids = () => {
-        // Select only the items currently visible in the grid slots
         const totalSlots = gridColumns * gridRows;
         const baseIndex = currentFileIndex < 0 ? 0 : currentFileIndex % Math.max(1, processedFiles.length);
         const gridFiles = [];
@@ -102,7 +156,6 @@ const RightSidebar = () => {
             }
         }
 
-        // Set the active grid files as the explorer selection, then open trailer modal
         const store = useMediaStore.getState();
         const paths = new Set(gridFiles.filter(f => f?.path).map(f => f.path));
         store.setExplorerSelectedFiles(paths);
@@ -120,27 +173,26 @@ const RightSidebar = () => {
                 </div>
 
                 <div className="p-0">
-                    {/* GENERATORS — MOVED TO TOP */}
+                    {/* GENERATORS — Animated SVG Icon Buttons */}
                     <FilterSection title="Make a Trailer" expanded={true}>
-                        <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            {/* Film Reel: All in Folder */}
                             <button
                                 onClick={handleTrailerWithFolder}
-                                className="w-full flex items-center justify-between p-1.5 rounded text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600/30 to-blue-600/30 text-white hover:from-purple-500/50 hover:to-blue-500/50 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)] transition-all hover:scale-[1.02] overflow-hidden"
+                                className="group/reel flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-br from-purple-600/20 to-blue-600/20 border border-purple-500/25 text-purple-300 hover:text-white hover:from-purple-500/40 hover:to-blue-500/40 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)] active:scale-95 transition-all duration-200"
+                                title="Make Trailer — All Videos in Folder"
                             >
-                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                    <Wand2 size={12} className="text-purple-300 shrink-0" />
-                                    <span className="truncate">...with all in folder</span>
-                                </div>
+                                <FilmReelIcon className="group-hover/reel:scale-110 group-active/reel:scale-90 transition-transform" />
                             </button>
+
+                            {/* Grid Mosaic: Active Grids */}
                             <button
                                 onClick={handleTrailerWithGrids}
-                                className="w-full flex items-center justify-between p-1.5 rounded text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-emerald-600/30 to-teal-600/30 text-white hover:from-emerald-500/50 hover:to-teal-500/50 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)] transition-all hover:scale-[1.02] overflow-hidden"
+                                className="group/mosaic flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-br from-emerald-600/20 to-teal-600/20 border border-emerald-500/25 text-emerald-300 hover:text-white hover:from-emerald-500/40 hover:to-teal-500/40 hover:border-emerald-400/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 transition-all duration-200 relative"
+                                title="Make Trailer — Active Grid Items"
                             >
-                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                    <LayoutGrid size={12} className="text-emerald-300 shrink-0" />
-                                    <span className="truncate">...with active grids</span>
-                                </div>
-                                <span className="text-[9px] font-mono bg-emerald-500/30 text-emerald-200 px-1.5 rounded shrink-0 ml-1">
+                                <GridMosaicIcon className="group-hover/mosaic:scale-110 group-active/mosaic:scale-90 transition-transform" />
+                                <span className="absolute -top-1 -right-1 text-[8px] font-mono font-black bg-emerald-500/80 text-white w-4 h-4 flex items-center justify-center rounded-full">
                                     {gridColumns * gridRows}
                                 </span>
                             </button>
@@ -161,26 +213,6 @@ const RightSidebar = () => {
                                 )}
                             >
                                 <span className="font-bold flex items-center gap-2"><Star size={12} fill={favoritesOnly ? "currentColor" : "none"} /> Favorites Only</span>
-                            </button>
-                        </div>
-                    </FilterSection>
-
-                    {/* UI SETTINGS */}
-                    <FilterSection title="UI Settings" expanded={true}>
-                        <div className="space-y-3">
-                            <button
-                                onClick={toggleJumpButtons}
-                                className={clsx(
-                                    "w-full flex items-center justify-between p-1.5 rounded text-[11px] transition-all",
-                                    showJumpButtons 
-                                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-[inset_0_0_8px_rgba(59,130,246,0.2)]" 
-                                        : "bg-white/5 text-[var(--text-secondary)] border border-white/5 hover:bg-white/10"
-                                )}
-                            >
-                                <span className="font-bold flex items-center gap-2">
-                                    <div className={clsx("w-2 h-2 rounded-full", showJumpButtons ? "bg-blue-400" : "bg-white/20")} />
-                                    Show Jump Bubble
-                                </span>
                             </button>
                         </div>
                     </FilterSection>
@@ -219,12 +251,18 @@ const RightSidebar = () => {
                         </div>
                     </FilterSection>
 
-                    {/* SORTING STACK — EXPANDED */}
+                    {/* SORTING STACK — Ctrl+Click to multi-sort */}
                     <FilterSection title="Sorting Order" expanded={true}>
                         <div className="space-y-1">
-                            {/* --- PRIMARY SORTS --- */}
+                            {sortStack.length > 1 && (
+                                <p className="text-[8px] text-white/30 uppercase font-bold tracking-wider px-1 pb-1">
+                                    Ctrl+Click to stack sorts
+                                </p>
+                            )}
+                            {/* --- PRIMARY SORTS (Aspect Ratio moved to #3) --- */}
                             <SortToggle field="name" label="Title / Name" icon={Type} />
                             <SortToggle field="folder" label="Folder" icon={Folder} />
+                            <SortToggle field="aspectRatio" label="Aspect Ratio" icon={RectangleHorizontal} />
                             <SortToggle field="dateModified" label="Date Modified" icon={Calendar} />
                             <SortToggle field="dateCreated" label="Date Created" icon={CalendarPlus} />
                             <SortToggle field="mediaDate" label="Media Date" icon={CalendarDays} />
@@ -235,7 +273,6 @@ const RightSidebar = () => {
 
                             {/* --- TECHNICAL SORTS --- */}
                             <SortToggle field="dimensions" label="Frame Height × Width" icon={Maximize} />
-                            <SortToggle field="aspectRatio" label="Aspect Ratio" icon={RectangleHorizontal} />
                             <SortToggle field="framerate" label="Framerate" icon={Gauge} />
                             <SortToggle field="bitrate" label="Bit Rate" icon={Activity} />
                             <SortToggle field="year" label="Year" icon={CalendarDays} />

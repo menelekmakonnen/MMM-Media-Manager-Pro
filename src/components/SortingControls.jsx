@@ -107,8 +107,8 @@ const SortingControls = ({ compact = false }) => {
                         className="bg-transparent text-[10px] text-gray-300 outline-none cursor-pointer hover:text-white"
                     >
                         <option value="all" className="bg-gray-900">Ratio: All</option>
-                        <option value="landscape" className="bg-gray-900">Landscape</option>
-                        <option value="portrait" className="bg-gray-900">Portrait</option>
+                        <option value="horizontal" className="bg-gray-900">Horizontal</option>
+                        <option value="vertical" className="bg-gray-900">Vertical</option>
                         <option value="square" className="bg-gray-900">Square</option>
                     </select>
                 </div>

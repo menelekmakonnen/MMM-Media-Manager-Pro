@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,7 +10,13 @@ app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
 app.commandLine.appendSwitch('video-threads', '8');
-app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// ─── Force correct identity on Windows ─────────────────────────────
+app.name = 'MMMedia Darkroom';
+if (process.platform === 'win32') {
+    app.setAppUserModelId('com.icunigroup.mmmediadarkroom');
+}
 
 let mainWindow;
 const stateFilePath = path.join(app.getPath('userData'), 'window-state.json');
@@ -25,13 +31,23 @@ const SUPPORTED_EXTENSIONS = new Set([
     '.mpg', '.mpeg', '.3gp', '.ts',
     // Image
     '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif',
-    '.svg', '.avif'
+    '.svg', '.avif',
+    // Project
+    '.mmm'
 ]);
+
+const PROJECT_EXTENSIONS = new Set(['.mmm']);
 
 function isMediaFile(filePath) {
     if (!filePath || typeof filePath !== 'string') return false;
     const ext = path.extname(filePath).toLowerCase();
     return SUPPORTED_EXTENSIONS.has(ext);
+}
+
+function isProjectFile(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    const ext = path.extname(filePath).toLowerCase();
+    return PROJECT_EXTENSIONS.has(ext);
 }
 
 /**
@@ -60,17 +76,19 @@ function getFileFromArgs(argv) {
 /**
  * Send the opened file path to the renderer.
  * If the window is not ready yet, store it as pending.
+ * Routes .mmm files to the project loader channel.
  */
 function sendFileToRenderer(filePath) {
     if (!filePath) return;
+    const channel = isProjectFile(filePath) ? 'open-mmm-file' : 'open-file';
     if (mainWindow && mainWindow.webContents) {
         // Wait for the page to be ready before sending
         if (mainWindow.webContents.isLoading()) {
             mainWindow.webContents.once('did-finish-load', () => {
-                mainWindow.webContents.send('open-file', filePath);
+                mainWindow.webContents.send(channel, filePath);
             });
         } else {
-            mainWindow.webContents.send('open-file', filePath);
+            mainWindow.webContents.send(channel, filePath);
         }
     } else {
         pendingFilePath = filePath;
@@ -131,7 +149,7 @@ function loadState() {
 
 // ─── Window Creation ────────────────────────────────────────────────
 
-function createWindow() {
+async function createWindow() {
     // const savedState = loadState(); // TEMPORARY: Ignore saved state to fix "stuck" fullscreen issues
     const savedState = null;
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -163,6 +181,7 @@ function createWindow() {
         },
         fullscreen: false, // FORCE Windowed mode on start
         frame: false, // Frameless for custom controls
+        title: 'MMMedia Darkroom', // Taskbar title
     });
 
     // savedState logic removed for now to force reset
@@ -202,10 +221,58 @@ function createWindow() {
 
     ipcMain.on('window-close', () => mainWindow?.close());
 
+    // Open file/folder in native File Explorer
+    ipcMain.on('show-item-in-folder', (event, filePath) => {
+        if (filePath) {
+            shell.showItemInFolder(filePath);
+        }
+    });
+
     ipcMain.on('window-fullscreen', () => {
         if (mainWindow) {
             // True Kiosk Toggle
             mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        }
+    });
+
+    // ─── IPC: .mmm Project File Operations ──────────────────────────
+    ipcMain.handle('save-mmm-project', async (_event, content) => {
+        const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: 'project.mmm',
+            filters: [
+                { name: 'MMMedia Project', extensions: ['mmm'] },
+                { name: 'JSON Manifest', extensions: ['json'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+        if (canceled || !filePath) return { success: false, canceled: true };
+        try {
+            await fs.promises.writeFile(filePath, content, 'utf-8');
+            console.log('[Main] Project saved to:', filePath);
+            return { success: true, filePath };
+        } catch (e) {
+            console.error('[Main] Failed to save project:', e);
+            return { success: false, error: String(e) };
+        }
+    });
+
+    ipcMain.handle('load-mmm-project', async () => {
+        const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openFile'],
+            filters: [
+                { name: 'MMMedia Project', extensions: ['mmm'] },
+                { name: 'JSON Files', extensions: ['json'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+        if (canceled || filePaths.length === 0) return { success: false, canceled: true };
+        try {
+            const content = await fs.promises.readFile(filePaths[0], 'utf-8');
+            console.log('[Main] Project loaded from:', filePaths[0]);
+            return { success: true, content, filePath: filePaths[0] };
+        } catch (e) {
+            console.error('[Main] Failed to load project:', e);
+            return { success: false, error: String(e) };
         }
     });
 
@@ -214,6 +281,17 @@ function createWindow() {
         const file = pendingFilePath;
         pendingFilePath = null;
         return file;
+    });
+
+    // ─── IPC: Check if a file exists ──────────────────────────────
+    // Used by EditsTab to verify source files before restoring an edit
+    ipcMain.handle('check-file-exists', async (_event, filePath) => {
+        try {
+            if (!filePath) return { exists: false };
+            return { exists: fs.existsSync(filePath) };
+        } catch {
+            return { exists: false };
+        }
     });
 
     // ─── IPC: Read an external file by path ─────────────────────────
@@ -252,6 +330,40 @@ function createWindow() {
         }
     });
 
+    // ─── IPC: Scan a folder for all media files ────────────────────
+    // Used to populate the slideshow with sibling files when opening via "Open with"
+    ipcMain.handle('read-folder-media', async (event, folderPath) => {
+        try {
+            if (!folderPath || !fs.existsSync(folderPath)) return [];
+            const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+            const mediaFiles = [];
+
+            for (const entry of entries) {
+                if (!entry.isFile()) continue;
+                const fullPath = path.join(folderPath, entry.name);
+                const ext = path.extname(entry.name).toLowerCase();
+                if (!SUPPORTED_EXTENSIONS.has(ext)) continue;
+
+                try {
+                    const stat = fs.statSync(fullPath);
+                    mediaFiles.push({
+                        name: entry.name,
+                        path: fullPath,
+                        folderPath: folderPath,
+                        size: stat.size,
+                        lastModified: stat.mtimeMs,
+                        ext: ext
+                    });
+                } catch (_) { /* skip unreadable files */ }
+            }
+
+            return mediaFiles;
+        } catch (err) {
+            console.error('[Main] Failed to scan folder:', err);
+            return [];
+        }
+    });
+
     // Pipe renderer logs to terminal
     mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
         const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
@@ -266,13 +378,17 @@ function createWindow() {
 
     if (isDev) {
         // Clear cache to fix persistent 504 errors
-        mainWindow.webContents.session.clearCache();
-        mainWindow.webContents.session.clearStorageData();
+        // IMPORTANT: Must await before loadURL to prevent race condition
+        try {
+            await mainWindow.webContents.session.clearCache();
+        } catch (e) { /* ignore */ }
 
         // Sync with Vite port in vite.config.js
         mainWindow.loadURL('http://localhost:9797').catch(() => {
-            console.warn('Vite server not found, falling back to local file if available');
-            mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                console.warn('Vite server not found, falling back to local file if available');
+                mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+            }
         });
         mainWindow.webContents.openDevTools();
     } else {
@@ -289,10 +405,7 @@ function createWindow() {
 // ─── App Lifecycle ──────────────────────────────────────────────────
 
 app.whenReady().then(() => {
-    // Set App ID for Windows taskbar consistency
-    if (process.platform === 'win32') {
-        app.setAppUserModelId('com.icunigroup.mmmediadarkroom');
-    }
+    // App identity is set at module level above
 
     // Check if a file was passed on initial launch
     pendingFilePath = getFileFromArgs(process.argv);

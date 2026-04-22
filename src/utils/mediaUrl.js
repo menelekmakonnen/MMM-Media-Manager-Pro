@@ -27,6 +27,37 @@ export const getMediaUrl = async (file) => {
         return urlCache.get(cacheKey);
     }
 
+    // External file: already has a blob URL (target file preloaded by handler)
+    if (file._externalBlobUrl) {
+        urlCache.set(cacheKey, file._externalBlobUrl);
+        return file._externalBlobUrl;
+    }
+
+    // External file: needs IPC read (sibling files loaded lazily)
+    if (file._externalPath && window.electronAPI?.readExternalFile) {
+        try {
+            const fileData = await window.electronAPI.readExternalFile(file._externalPath);
+            if (fileData) {
+                const blob = new Blob([fileData.buffer], { type: fileData.mimeType });
+                const url = URL.createObjectURL(blob);
+
+                // LRU eviction
+                if (urlCache.size >= MAX_URL_CACHE) {
+                    const firstKey = urlCache.keys().next().value;
+                    const oldUrl = urlCache.get(firstKey);
+                    if (oldUrl) URL.revokeObjectURL(oldUrl);
+                    urlCache.delete(firstKey);
+                }
+
+                urlCache.set(cacheKey, url);
+                return url;
+            }
+        } catch (err) {
+            console.error('[mediaUrl] Failed to read external file:', file.path, err);
+        }
+        return null;
+    }
+
     // For GIFs in image type, try handle-based approach
     if (!file.handle) {
         console.warn('[mediaUrl] No handle for file:', file.path);

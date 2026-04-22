@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Play, Pause, Volume2, VolumeX, RefreshCw, RotateCcw, FastForward, Rewind, Shuffle } from 'lucide-react';
 import { useVideoRegistry } from '../contexts/VideoRegistryContext.js';
 import useMediaStore from '../stores/useMediaStore.js';
@@ -10,7 +10,11 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
     const [isMuted, setIsMuted] = useState(false);
     const [localRate, setLocalRate] = useState(null); // Override master if set
     const { register, unregister } = useVideoRegistry();
-    const { mediaFitMode, isChaosMode } = useMediaStore();
+    const { mediaFitMode, isChaosMode, setMasterVolume, masterVolume: storeVolume, setIsMasterMuted, gridColumns, gridRows } = useMediaStore();
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const audioGraphRef = useRef(null);
+    const isSingleGrid = gridColumns === 1 && gridRows === 1;
 
     const effectiveRate = localRate !== null ? localRate : (masterPlaybackRate || 1);
 
@@ -28,14 +32,58 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
         }
     }, [register, unregister, slotIndex]);
 
-    // Apply master volume
+    // Apply master volume with quadratic curve for perceptual smoothness, with Web Audio API boost for VLC-level loudness (>100%)
     useEffect(() => {
-        if (videoRef.current && masterVolume !== undefined) {
-            videoRef.current.volume = masterVolume;
+        const video = videoRef.current;
+        if (!video || masterVolume === undefined) return;
+
+        const rawVol = masterVolume * masterVolume;
+
+        if (masterVolume > 1) {
+            // Need amplification > 100%
+            if (!audioGraphRef.current) {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const ctx = new AudioContext();
+                    const source = ctx.createMediaElementSource(video);
+                    const gain = ctx.createGain();
+                    source.connect(gain);
+                    gain.connect(ctx.destination);
+                    audioGraphRef.current = { ctx, gain };
+                } catch (err) {
+                    console.warn("Could not create audio context for volume boost", err);
+                }
+            }
+
+            if (audioGraphRef.current) {
+                video.volume = 1; // Native max
+                audioGraphRef.current.gain.gain.value = rawVol; // Extra amplification
+                if (audioGraphRef.current.ctx.state === 'suspended') {
+                    audioGraphRef.current.ctx.resume().catch(() => {});
+                }
+            } else {
+                // Fallback if context fails
+                video.volume = 1;
+            }
+        } else {
+            // Standard volume 0-100%
+            video.volume = rawVol;
+            if (audioGraphRef.current) {
+                audioGraphRef.current.gain.gain.value = 1; // Remove extra amplification
+            }
         }
     }, [masterVolume]);
 
-    // Apply Chaos mode start time
+    // Clean up AudioContext on unmount
+    useEffect(() => {
+        return () => {
+            if (audioGraphRef.current) {
+                audioGraphRef.current.ctx.close().catch(() => {});
+            }
+        };
+    }, []);
+
+    // Apply Chaos mode start time OR restore saved seek position
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
@@ -43,12 +91,29 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
         const handleLoadedMetadata = () => {
             if (isChaosMode && video.duration) {
                 video.currentTime = Math.random() * video.duration;
+            } else if (file?.path) {
+                // Restore saved seek position from store (persists across Standard ↔ Slideshow)
+                const savedTime = useMediaStore.getState().getVideoSeekTime(file.path);
+                if (savedTime > 0 && savedTime < video.duration) {
+                    video.currentTime = savedTime;
+                }
             }
         };
 
         video.addEventListener('loadedmetadata', handleLoadedMetadata);
         return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-    }, [isChaosMode, fileUrl]);
+    }, [isChaosMode, fileUrl, file?.path]);
+
+    // Save video seek position to store on unmount or file change
+    useEffect(() => {
+        const video = videoRef.current;
+        const filePath = file?.path;
+        return () => {
+            if (video && filePath && video.currentTime > 0) {
+                useMediaStore.getState().setVideoSeekTime(filePath, video.currentTime);
+            }
+        };
+    }, [file?.path]);
 
     // Apply Playback Rate
     useEffect(() => {
@@ -109,6 +174,32 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
         };
     }, []);
 
+    // Track currentTime and duration for seek slider
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const onTimeUpdate = () => setCurrentTime(video.currentTime);
+        const onDurationChange = () => setDuration(video.duration || 0);
+        video.addEventListener('timeupdate', onTimeUpdate);
+        video.addEventListener('durationchange', onDurationChange);
+        video.addEventListener('loadedmetadata', onDurationChange);
+        return () => {
+            video.removeEventListener('timeupdate', onTimeUpdate);
+            video.removeEventListener('durationchange', onDurationChange);
+            video.removeEventListener('loadedmetadata', onDurationChange);
+        };
+    }, []);
+
+    // Mouse wheel volume control
+    const handleWheel = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY < 0 ? 0.05 : -0.05; // Scroll up = louder
+        const newVol = Math.max(0, Math.min(4, storeVolume + delta)); // Max 400% (VLC style)
+        setMasterVolume(newVol);
+        setIsMasterMuted(newVol <= 0);
+    };
+
     // HANDLERS
     const togglePlay = (e) => {
         e.stopPropagation();
@@ -161,7 +252,7 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
     const isRotatedAxis = typeof rotation === 'number' ? (rotation % 180 !== 0) : false;
 
     return (
-        <div className="absolute inset-0 bg-black group-hover:bg-black/90 transition-colors group overflow-hidden flex items-center justify-center">
+        <div className="absolute inset-0 bg-black group-hover:bg-black/90 transition-colors group overflow-hidden flex items-center justify-center" onWheel={handleWheel}>
             <video
                 ref={videoRef}
                 src={fileUrl}
@@ -207,9 +298,21 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
                         </button>
 
                         {/* Volume */}
-                        <button onClick={toggleMute} className="text-gray-300 hover:text-white p-1">
-                            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                        </button>
+                        <div className="flex items-center group/vol">
+                            <button onClick={toggleMute} className="text-gray-300 hover:text-white p-1">
+                                {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                            </button>
+                            <div className="w-0 overflow-hidden group-hover/vol:w-16 transition-all duration-300 flex items-center">
+                                <input 
+                                    type="range" min="0" max="4" step="0.05" 
+                                    value={storeVolume} 
+                                    onChange={(e) => { e.stopPropagation(); setMasterVolume(parseFloat(e.target.value)); setIsMasterMuted(false); }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={Math.round(storeVolume * 100) + '%'}
+                                    className="w-14 h-1 cursor-pointer appearance-none bg-white/20 accent-[var(--accent-primary)] [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none" 
+                                />
+                            </div>
+                        </div>
 
                         {/* Speed */}
                         <button onClick={cycleSpeed} className="flex items-center justify-center w-6 text-[9px] font-bold text-gray-300 hover:text-white border border-white/20 rounded ml-1" title={`Speed: ${effectiveRate}x`}>
@@ -236,8 +339,42 @@ const VideoPlayer = forwardRef(({ file, fileUrl, isActive, onRandomVideo, onShuf
                     </div>
                 </div>
             )}
+
+            {/* Seek Slider — always visible at bottom in single grid */}
+            {isSingleGrid && duration > 0 && (
+                <div className="absolute bottom-0 left-0 right-0 z-[80] group/seek">
+                    {/* Time tooltip on hover */}
+                    <div className="opacity-0 group-hover/seek:opacity-100 transition-opacity absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur text-white text-[10px] font-mono px-2 py-0.5 rounded pointer-events-none">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                    </div>
+                    <input
+                        type="range"
+                        min="0"
+                        max={duration || 1}
+                        step="0.1"
+                        value={currentTime}
+                        onChange={(e) => {
+                            e.stopPropagation();
+                            if (videoRef.current) {
+                                videoRef.current.currentTime = parseFloat(e.target.value);
+                            }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full h-1 hover:h-2 cursor-pointer appearance-none bg-white/20 accent-[var(--accent-primary)] transition-all [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:hover:w-3 [&::-webkit-slider-thumb]:hover:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:transition-all"
+                        style={{ background: `linear-gradient(to right, var(--accent-primary) ${(currentTime / duration) * 100}%, rgba(255,255,255,0.2) ${(currentTime / duration) * 100}%)` }}
+                    />
+                </div>
+            )}
         </div>
     );
 });
+
+// Helper to format seconds as mm:ss
+const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 export default VideoPlayer;

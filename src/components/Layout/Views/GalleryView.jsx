@@ -257,194 +257,102 @@ const GalleryView = () => {
                         exit={{ height: 0, opacity: 0 }}
                         className="bg-black/95 border-b border-white/5 overflow-hidden backdrop-blur-3xl z-30"
                     >
-                        <div className="p-6 flex flex-col gap-6 max-w-7xl mx-auto">
-                            {/* ROW 1: Media Type, View Mode, Orientation */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                {/* Media Type */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                        <Layers size={12} /> Media Type
-                                    </span>
-                                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
-                                        {['all', 'image', 'video', 'gif'].map(t => (
-                                            <button
-                                                key={t}
-                                                onClick={() => setFileTypeFilter(t)}
-                                                className={clsx(
-                                                    "flex-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all min-w-0 truncate",
-                                                    (fileTypeFilter.includes(t) || (t === 'all' && fileTypeFilter.includes('all'))) ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white"
-                                                )}
-                                            >
-                                                {t}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* View Mode */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                        <Folder size={12} /> View Mode
-                                    </span>
-                                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
-                                        <button
-                                            onClick={() => setGalleryViewMode('media')}
-                                            className={clsx("flex-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all", galleryViewMode === 'media' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white")}
-                                        >
-                                            Media
-                                        </button>
-                                        <button
-                                            onClick={() => setGalleryViewMode('both')}
-                                            className={clsx("flex-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all", galleryViewMode === 'both' ? "bg-[var(--accent-primary)] text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white")}
-                                        >
-                                            Both
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Orientation */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                        <ArrowLeftRight size={12} /> Orientation
-                                    </span>
-                                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
-                                        {[
-                                            { id: 'vertical', label: 'Vrt' },
-                                            { id: 'horizontal', label: 'Hrz' },
-                                            { id: 'square', label: 'Sqr' }
-                                        ].map(o => (
-                                            <button
-                                                key={o.id}
-                                                onClick={() => setGalleryOrientation(o.id)}
-                                                className={clsx(
-                                                    "flex-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all",
-                                                    galleryOrientation === o.id ? "bg-amber-500 text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white"
-                                                )}
-                                            >
-                                                {o.label}
-                                            </button>
-                                        ))}
-                                    </div>
+                        <div className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                            {/* Media Type */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] uppercase tracking-wider text-white/30 font-bold whitespace-nowrap"><Layers size={10} className="inline mr-1" />Type</span>
+                                <div className="flex gap-0.5 bg-white/5 p-0.5 rounded-lg">
+                                    {['all', 'image', 'video', 'gif'].map(t => (
+                                        <button key={t} onClick={() => setFileTypeFilter(t)}
+                                            className={clsx("px-2 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                                                (fileTypeFilter.includes(t) || (t === 'all' && fileTypeFilter.includes('all'))) ? "bg-[var(--accent-primary)] text-white" : "text-white/40 hover:text-white"
+                                            )}>{t}</button>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* ROW 2: Sort By — Full width dedicated row */}
-                            <div className="flex flex-col gap-3">
-                                <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                    <SortAsc size={12} /> Sort By
-                                </span>
-                                <div className="flex gap-1.5 bg-white/5 p-1.5 rounded-xl items-center">
+                            <div className="w-px h-5 bg-white/10" />
+
+                            {/* View Mode */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] uppercase tracking-wider text-white/30 font-bold whitespace-nowrap"><Folder size={10} className="inline mr-1" />View</span>
+                                <div className="flex gap-0.5 bg-white/5 p-0.5 rounded-lg">
+                                    {['media', 'both'].map(v => (
+                                        <button key={v} onClick={() => setGalleryViewMode(v)}
+                                            className={clsx("px-2 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                                                galleryViewMode === v ? "bg-[var(--accent-primary)] text-white" : "text-white/40 hover:text-white"
+                                            )}>{v}</button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="w-px h-5 bg-white/10" />
+
+                            {/* Orientation */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] uppercase tracking-wider text-white/30 font-bold whitespace-nowrap"><ArrowLeftRight size={10} className="inline mr-1" />Orient</span>
+                                <div className="flex gap-0.5 bg-white/5 p-0.5 rounded-lg">
+                                    {[{ id: 'vertical', label: 'V' }, { id: 'horizontal', label: 'H' }, { id: 'square', label: 'S' }].map(o => (
+                                        <button key={o.id} onClick={() => setGalleryOrientation(o.id)}
+                                            className={clsx("px-2 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                                                galleryOrientation === o.id ? "bg-amber-500 text-white" : "text-white/40 hover:text-white"
+                                            )}>{o.label}</button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="w-px h-5 bg-white/10" />
+
+                            {/* Sort By */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] uppercase tracking-wider text-white/30 font-bold whitespace-nowrap"><SortAsc size={10} className="inline mr-1" />Sort</span>
+                                <div className="flex gap-0.5 bg-white/5 p-0.5 rounded-lg">
                                     {[
-                                        { id: 'name', label: 'Name' },
-                                        { id: 'date', label: 'Modified' },
-                                        { id: 'dateCreated', label: 'Created' },
-                                        { id: 'size', label: 'Size' },
-                                        { id: 'folder', label: 'Folder' },
-                                        { id: 'duration', label: 'Length' },
-                                        { id: 'dimensions', label: 'Frame' },
-                                        { id: 'framerate', label: 'FPS' },
-                                        { id: 'bitrate', label: 'Bitrate' },
-                                        { id: 'year', label: 'Year' },
-                                        { id: 'type', label: 'Type' }
+                                        { id: 'name', label: 'Name' }, { id: 'date', label: 'Mod' }, { id: 'dateCreated', label: 'Crt' },
+                                        { id: 'size', label: 'Size' }, { id: 'folder', label: 'Dir' }, { id: 'duration', label: 'Len' },
+                                        { id: 'dimensions', label: 'Dim' }, { id: 'framerate', label: 'FPS' }, { id: 'type', label: 'Type' }
                                     ].map(s => (
-                                        <button
-                                            key={s.id}
-                                            onClick={() => setGalleryFilter({ ...galleryFilter, sortBy: s.id })}
-                                            className={clsx(
-                                                "flex-1 px-2 py-2 rounded-lg text-[10px] font-bold uppercase transition-all text-center min-w-0",
-                                                galleryFilter.sortBy === s.id ? "bg-purple-500 text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white"
-                                            )}
-                                        >
-                                            {s.label}
-                                        </button>
+                                        <button key={s.id} onClick={() => setGalleryFilter({ ...galleryFilter, sortBy: s.id })}
+                                            className={clsx("px-1.5 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                                                galleryFilter.sortBy === s.id ? "bg-purple-500 text-white" : "text-white/40 hover:text-white"
+                                            )}>{s.label}</button>
                                     ))}
-                                    <div className="w-px h-6 bg-white/10 mx-1 shrink-0" />
-                                    {[
-                                        { id: 'asc', icon: SortAsc },
-                                        { id: 'desc', icon: SortDesc }
-                                    ].map(o => (
-                                        <button
-                                            key={o.id}
-                                            onClick={() => setGalleryFilter({ ...galleryFilter, sortOrder: o.id })}
-                                            className={clsx(
-                                                "p-2 rounded-lg transition-all shrink-0",
-                                                galleryFilter.sortOrder === o.id ? "bg-blue-500 text-white shadow-lg" : "text-white/40 hover:bg-white/10"
-                                            )}
-                                        >
-                                            <o.icon size={14} />
-                                        </button>
+                                    <div className="w-px h-4 bg-white/10 mx-0.5" />
+                                    {[{ id: 'asc', icon: SortAsc }, { id: 'desc', icon: SortDesc }].map(o => (
+                                        <button key={o.id} onClick={() => setGalleryFilter({ ...galleryFilter, sortOrder: o.id })}
+                                            className={clsx("p-1 rounded transition-all",
+                                                galleryFilter.sortOrder === o.id ? "bg-blue-500 text-white" : "text-white/40 hover:text-white"
+                                            )}><o.icon size={11} /></button>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* ROW 3: Aspect Ratio, Name Length, Quality */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                {/* Aspect Ratio */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                        <LayoutPanelLeft size={12} /> Aspect Ratio
-                                    </span>
-                                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
-                                        {[
-                                            { id: 'all', label: 'All' },
-                                            { id: 'landscape', label: 'Land' },
-                                            { id: 'portrait', label: 'Port' },
-                                            { id: 'square', label: 'Sqr' }
-                                        ].map(a => (
-                                            <button
-                                                key={a.id}
-                                                onClick={() => setMetadataFilters({ aspectRatio: a.id })}
-                                                className={clsx(
-                                                    "flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all min-w-0 truncate",
-                                                    metadataFilters.aspectRatio === a.id ? "bg-emerald-500 text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white"
-                                                )}
-                                            >
-                                                {a.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                            <div className="w-px h-5 bg-white/10" />
 
-                                {/* Name Length */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                        <Search size={12} /> Name Length
-                                    </span>
-                                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
-                                        {['all', 'short', 'medium', 'long'].map(l => (
-                                            <button
-                                                key={l}
-                                                onClick={() => setMetadataFilters({ nameLength: l })}
-                                                className={clsx(
-                                                    "flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all min-w-0 truncate",
-                                                    metadataFilters.nameLength === l ? "bg-orange-500 text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white"
-                                                )}
-                                            >
-                                                {l}
-                                            </button>
-                                        ))}
-                                    </div>
+                            {/* Aspect / Quality compact */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] uppercase tracking-wider text-white/30 font-bold whitespace-nowrap">Ratio</span>
+                                <div className="flex gap-0.5 bg-white/5 p-0.5 rounded-lg">
+                                    {[{ id: 'all', label: 'All' }, { id: 'landscape', label: 'L' }, { id: 'portrait', label: 'P' }, { id: 'square', label: 'S' }].map(a => (
+                                        <button key={a.id} onClick={() => setMetadataFilters({ aspectRatio: a.id })}
+                                            className={clsx("px-1.5 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                                                metadataFilters.aspectRatio === a.id ? "bg-emerald-500 text-white" : "text-white/40 hover:text-white"
+                                            )}>{a.label}</button>
+                                    ))}
                                 </div>
+                            </div>
 
-                                {/* Quality Filter */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black flex items-center gap-2">
-                                        <Minimize2 size={12} /> Quality
-                                    </span>
-                                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
-                                        {['all', 'low', 'high', '4k'].map(r => (
-                                            <button
-                                                key={r}
-                                                onClick={() => setMetadataFilters({ resolution: r })}
-                                                className={clsx(
-                                                    "flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all min-w-0 truncate",
-                                                    metadataFilters.resolution === r ? "bg-blue-600 text-white shadow-lg" : "text-white/40 hover:bg-white/5 hover:text-white"
-                                                )}
-                                            >
-                                                {r}
-                                            </button>
-                                        ))}
-                                    </div>
+                            <div className="w-px h-5 bg-white/10" />
+
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] uppercase tracking-wider text-white/30 font-bold whitespace-nowrap">Qual</span>
+                                <div className="flex gap-0.5 bg-white/5 p-0.5 rounded-lg">
+                                    {['all', 'low', 'high', '4k'].map(r => (
+                                        <button key={r} onClick={() => setMetadataFilters({ resolution: r })}
+                                            className={clsx("px-1.5 py-1 rounded text-[9px] font-bold uppercase transition-all",
+                                                metadataFilters.resolution === r ? "bg-blue-600 text-white" : "text-white/40 hover:text-white"
+                                            )}>{r}</button>
+                                    ))}
                                 </div>
                             </div>
                         </div>

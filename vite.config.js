@@ -11,6 +11,7 @@ export default defineConfig({
   base: './', // Ensure relative paths for Electron
   resolve: {
     alias: {
+      '@mmm-pro': path.resolve(__dirname, '../MMMedia Pro/src'),
     }
   },
   server: {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import useMediaStore from '../../stores/useMediaStore';
 import clsx from 'clsx';
 import {
@@ -8,6 +8,85 @@ import {
     LayoutGrid, Grid3X3, Columns3, Grid2X2, Columns, Grid, Table,
     RotateCw, Gauge, Clock, ChevronUp, ChevronDown, Monitor, Flame
 } from 'lucide-react';
+
+// === Duration Control with Hold-to-Repeat & Scroll Wheel ===
+const DurationControl = ({ slideshowDuration, setSlideshowDuration, isAutoAdvance, setIsAutoAdvance }) => {
+    const holdRef = useRef(null);
+    const containerRef = useRef(null);
+
+    const adjust = useCallback((delta) => {
+        setSlideshowDuration(Math.max(1, Math.min(90, (slideshowDuration || 5) + delta)));
+    }, [slideshowDuration, setSlideshowDuration]);
+
+    const startHold = useCallback((delta) => {
+        // Immediate first tick
+        adjust(delta);
+        // Start repeating after 400ms, then every 120ms
+        const timeout = setTimeout(() => {
+            const interval = setInterval(() => {
+                const current = useMediaStore.getState().slideshowDuration || 5;
+                const next = Math.max(1, Math.min(90, current + delta));
+                setSlideshowDuration(next);
+            }, 120);
+            holdRef.current = { interval, timeout: null };
+        }, 400);
+        holdRef.current = { timeout, interval: null };
+    }, [adjust, setSlideshowDuration]);
+
+    const stopHold = useCallback(() => {
+        if (holdRef.current) {
+            if (holdRef.current.timeout) clearTimeout(holdRef.current.timeout);
+            if (holdRef.current.interval) clearInterval(holdRef.current.interval);
+            holdRef.current = null;
+        }
+    }, []);
+
+    // Wheel handler on the container
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const onWheel = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const delta = e.deltaY < 0 ? 1 : -1;
+            setSlideshowDuration(Math.max(1, Math.min(90, (slideshowDuration || 5) + delta)));
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, [slideshowDuration, setSlideshowDuration]);
+
+    return (
+        <div ref={containerRef} className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 shadow-lg">
+            <div className="flex flex-col items-center bg-black/40 rounded-lg border border-white/5 px-1 py-0.5">
+                <button
+                    onMouseDown={() => startHold(1)}
+                    onMouseUp={stopHold}
+                    onMouseLeave={stopHold}
+                    className="text-gray-500 hover:text-white transition-colors h-3 flex items-center"
+                    title="Hold to increase duration"
+                >
+                    <ChevronUp size={12} />
+                </button>
+                <span
+                    onClick={() => setIsAutoAdvance && setIsAutoAdvance(!isAutoAdvance)}
+                    className={clsx("text-xs font-bold font-mono py-0.5 cursor-pointer select-none transition-colors", isAutoAdvance ? "text-green-400" : "text-gray-500")}
+                    title="Click to toggle Auto-Advance"
+                >
+                    {slideshowDuration || 5}s
+                </span>
+                <button
+                    onMouseDown={() => startHold(-1)}
+                    onMouseUp={stopHold}
+                    onMouseLeave={stopHold}
+                    className="text-gray-500 hover:text-white transition-colors h-3 flex items-center"
+                    title="Hold to decrease duration"
+                >
+                    <ChevronDown size={12} />
+                </button>
+            </div>
+        </div>
+    );
+};
 
 const ControlPanel = ({
     onPlayAll, onPauseAll, onStopAll, onRandomizeAll, onSkipAll,
@@ -31,17 +110,30 @@ const ControlPanel = ({
         isChaosMode, toggleChaosMode
     } = useMediaStore();
 
-    // Logarithmic Volume Helper
-    // Slider (0-1) -> Volume (0-1) : x^2 curve
-    // Volume (0-1) -> Slider (0-1) : sqrt(x)
+    // Volume Slider Architecture:
+    // Slider range: 0–200
+    // 0–100 → Volume 0–1.0 via x² curve (precise low-volume control)
+    // 100–200 → Volume 1.0–4.0 linear (VLC-style boost, uses Web Audio gain)
     const handleVolumeChange = (e) => {
-        const linearVal = parseInt(e.target.value) / 100;
-        const logVal = Math.pow(linearVal, 2); // x^2 curve
-        setMasterVolume(logVal);
+        const raw = parseInt(e.target.value);
+        let vol;
+        if (raw <= 100) {
+            const linearVal = raw / 100;
+            vol = Math.pow(linearVal, 2); // x² curve for fine control
+        } else {
+            vol = 1.0 + ((raw - 100) / 100) * 3.0; // 1.0 → 4.0 linear
+        }
+        setMasterVolume(vol);
         setIsMasterMuted(false);
     };
 
-    const sliderValue = isMasterMuted ? 0 : Math.sqrt(masterVolume) * 100;
+    const sliderValue = (() => {
+        if (isMasterMuted) return 0;
+        if (masterVolume <= 1.0) return Math.sqrt(masterVolume) * 100;
+        return 100 + ((masterVolume - 1.0) / 3.0) * 100; // reverse the linear boost
+    })();
+
+    const volumePercent = isMasterMuted ? 0 : Math.round(masterVolume * 100);
 
     return (
         <div className={clsx(
@@ -55,19 +147,12 @@ const ControlPanel = ({
                 {/* DURATION CONTROLS (Show only in Compact/Slideshow Mode) */}
                 <div className="flex-1 flex justify-start pl-2">
                     {compact && (
-                        <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 shadow-lg">
-                            <div className="flex flex-col items-center bg-black/40 rounded-lg border border-white/5 px-1 py-0.5">
-                                <button onClick={() => setSlideshowDuration(Math.min(60, (slideshowDuration || 5) + 5))} onDoubleClick={() => setSlideshowDuration(60)} className="text-gray-500 hover:text-white transition-colors h-3 flex items-center" title="Click: +5s | Double-click: 60s">
-                                    <ChevronUp size={12} />
-                                </button>
-                                <span onClick={() => setIsAutoAdvance && setIsAutoAdvance(!isAutoAdvance)} className={clsx("text-xs font-bold font-mono py-0.5 cursor-pointer select-none transition-colors", isAutoAdvance ? "text-green-400" : "text-gray-500")} title="Click to toggle Auto-Advance">
-                                    {slideshowDuration || 5}s
-                                </span>
-                                <button onClick={() => setSlideshowDuration(Math.max(5, (slideshowDuration || 5) - 5))} onDoubleClick={() => setSlideshowDuration(5)} className="text-gray-500 hover:text-white transition-colors h-3 flex items-center" title="Click: -5s | Double-click: 5s">
-                                    <ChevronDown size={12} />
-                                </button>
-                            </div>
-                        </div>
+                        <DurationControl
+                            slideshowDuration={slideshowDuration}
+                            setSlideshowDuration={setSlideshowDuration}
+                            isAutoAdvance={isAutoAdvance}
+                            setIsAutoAdvance={setIsAutoAdvance}
+                        />
                     )}
                 </div>
 
@@ -122,15 +207,18 @@ const ControlPanel = ({
                         </div>
                     </div>
 
-                    {/* Bottom: Volume Slider (Full Width constraint) */}
+                    {/* Bottom: Volume Slider (Full Width — now 400% capable) */}
                     <div className="flex items-center gap-2 px-2 pb-0 group/vol w-full max-w-[500px]">
                         <button onClick={() => setIsMasterMuted(!isMasterMuted)} className={clsx("p-1 transition-colors", isMasterMuted ? "text-gray-500" : "text-[var(--text-dim)] hover:text-white")}>
                             {isMasterMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                         </button>
                         <input
-                            type="range" min="0" max="100" value={sliderValue} onChange={handleVolumeChange} 
+                            type="range" min="0" max="200" value={sliderValue} onChange={handleVolumeChange} 
                             className="w-full h-1 accent-[var(--accent-primary)] bg-white/10 rounded-full cursor-pointer opacity-60 group-hover/vol:opacity-100 transition-opacity"
                         />
+                        <span className={clsx("text-[9px] font-mono font-bold min-w-[32px] text-right transition-colors", volumePercent > 100 ? "text-orange-400" : "text-white/40")}>
+                            {volumePercent}%
+                        </span>
                     </div>
                 </div>
 

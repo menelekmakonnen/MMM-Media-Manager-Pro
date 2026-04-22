@@ -30,14 +30,38 @@
     "icon": "public/icon.png",
     "fileAssociations": [
       {
-        "ext": ["mp4", "mkv", "avi", "mov", "webm", "wmv", "flv", "m4v", "mpg", "mpeg", "3gp", "ts"],
+        "ext": [
+          "mp4",
+          "mkv",
+          "avi",
+          "mov",
+          "webm",
+          "wmv",
+          "flv",
+          "m4v",
+          "mpg",
+          "mpeg",
+          "3gp",
+          "ts"
+        ],
         "name": "Video File",
         "description": "Video file playable in MMMedia Darkroom",
         "role": "Viewer",
         "icon": "public/icon.png"
       },
       {
-        "ext": ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "svg", "avif"],
+        "ext": [
+          "jpg",
+          "jpeg",
+          "png",
+          "gif",
+          "webp",
+          "bmp",
+          "tiff",
+          "tif",
+          "svg",
+          "avif"
+        ],
         "name": "Image File",
         "description": "Image file viewable in MMMedia Darkroom",
         "role": "Viewer",
@@ -86,6 +110,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^4.3.4",

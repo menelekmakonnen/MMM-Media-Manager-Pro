@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import useMediaStore from '../stores/useMediaStore';
 
+// View cycle order for ESC key
+const VIEW_CYCLE = ['standard', 'stream', 'slideshow', 'gallery', 'trailer', 'settings'];
+
 export const useKeyboardBindings = () => {
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -14,7 +17,8 @@ export const useKeyboardBindings = () => {
             const isMatch = (combo) => {
                 if (!combo) return false;
                 if (typeof combo === 'string') {
-                    return e.key === combo && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey;
+                    // Single key — must not have any modifier
+                    return e.key.toLowerCase() === combo.toLowerCase() && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey;
                 }
                 if (Array.isArray(combo)) {
                     const hasCtrl = combo.includes('Control');
@@ -28,41 +32,56 @@ export const useKeyboardBindings = () => {
                         e.shiftKey === hasShift &&
                         e.altKey === hasAlt &&
                         e.metaKey === hasMeta &&
-                        e.key === keyChar
+                        e.key.toLowerCase() === keyChar.toLowerCase()
                     );
                 }
                 return false;
             };
 
-            // Hardcoded System Overrides (F, M, Esc)
-            if (e.key === 'Escape') {
-                if (state.appViewMode === 'slideshow') {
-                    state.setAppViewMode('standard');
-                    return;
-                }
-                if (state.fullscreenMode) state.toggleFullscreen();
-                if (state.movieMode) state.toggleMovieMode();
-                return;
-            }
-            if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey) {
-                state.toggleFullscreen();
-                return;
-            }
-            if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey) {
-                state.toggleMovieMode();
-                return;
-            }
-
-            // Prevent default browser behavior ONLY if we matched a binding, OR for spacebar in media viewing
             let preventDefault = false;
 
-            // Playback Actions (Active in Standard and Slideshow)
+            // === ESC: Cycle through views sequentially ===
+            if (e.key === 'Escape') {
+                // If in fullscreen or movie mode, exit those first
+                if (state.fullscreenMode) {
+                    state.toggleFullscreen();
+                    e.preventDefault();
+                    return;
+                }
+                if (state.movieMode) {
+                    state.toggleMovieMode();
+                    e.preventDefault();
+                    return;
+                }
+                // Cycle to next view
+                const currentIdx = VIEW_CYCLE.indexOf(appViewMode);
+                const nextIdx = (currentIdx + 1) % VIEW_CYCLE.length;
+                state.setAppViewMode(VIEW_CYCLE[nextIdx]);
+                e.preventDefault();
+                return;
+            }
+
+            // === Fullscreen: Shift+F (configurable) ===
+            if (isMatch(keyboardBindings.fullscreen)) {
+                state.toggleFullscreen();
+                e.preventDefault();
+                return;
+            }
+
+            // === Movie Mode: M key (configurable) ===
+            if (isMatch(keyboardBindings.movieMode)) {
+                state.toggleMovieMode();
+                e.preventDefault();
+                return;
+            }
+
+            // === Playback: Space = Play/Pause (Standard and Slideshow) ===
             if (['standard', 'slideshow'].includes(appViewMode) && isMatch(keyboardBindings.playPause)) {
                 state.toggleGlobalPlay();
                 preventDefault = true;
             }
 
-            // Global Navigation Actions
+            // === Navigation ===
             if (isMatch(keyboardBindings.nextItem)) {
                 state.nextFile();
                 preventDefault = true;
@@ -77,29 +96,41 @@ export const useKeyboardBindings = () => {
                 preventDefault = true;
             }
 
-            // Volume Control (Standard & Slideshow)
+            // === Random Jump: R key (Standard and Slideshow) ===
+            if (['standard', 'slideshow'].includes(appViewMode) && isMatch(keyboardBindings.randomJump)) {
+                // Trigger random start on all registered videos
+                state.triggerRandomStart();
+                // Also randomize all video elements directly via DOM
+                document.querySelectorAll('video').forEach(v => {
+                    if (v.duration && !isNaN(v.duration)) {
+                        v.currentTime = Math.random() * v.duration;
+                    }
+                });
+                preventDefault = true;
+            }
+
+            // === Volume Control (Standard & Slideshow) ===
             if (['standard', 'slideshow'].includes(appViewMode)) {
                 if (isMatch(keyboardBindings.volumeUp)) {
-                    state.setMasterVolume(Math.min(1, state.masterVolume + 0.05));
+                    // Smoother volume: step 0.02 instead of 0.05
+                    state.setMasterVolume(Math.min(4, state.masterVolume + 0.02));
                     state.setIsMasterMuted(false);
                     preventDefault = true;
                 } else if (isMatch(keyboardBindings.volumeDown)) {
-                    state.setMasterVolume(Math.max(0, state.masterVolume - 0.05));
-                    if (state.masterVolume - 0.05 <= 0) state.setIsMasterMuted(true);
+                    state.setMasterVolume(Math.max(0, state.masterVolume - 0.02));
+                    if (state.masterVolume - 0.02 <= 0) state.setIsMasterMuted(true);
                     preventDefault = true;
                 }
             }
 
-            // Scroll overriding only applies if explicitly mapped, BUT Gallery View should naturally scroll if its ArrowUp/Down
+            // Gallery View: Let arrows scroll naturally
             if (appViewMode === 'gallery') {
-               // We let the browser handle ArrowUp/Down natively unless the user bound it differently and we want to prevent it.
-               // The request: "On the Gallery Page, the top and down arrow is for scrolling up or down." -> Natural scrolling.
-               if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                   preventDefault = false; 
-               }
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    preventDefault = false;
+                }
             }
 
-            // Grid Assignments (Numpads)
+            // === Grid Assignments (Numpads) ===
             if (['standard', 'slideshow'].includes(appViewMode)) {
                 if (isMatch(keyboardBindings.grid1)) { state.setGridLayout(1, 1); preventDefault = true; }
                 else if (isMatch(keyboardBindings.grid2)) { state.setGridLayout(2, 1); preventDefault = true; }

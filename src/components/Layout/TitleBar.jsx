@@ -1,6 +1,8 @@
 import React from 'react';
 import { Minus, Square, X, ChevronRight } from 'lucide-react';
 import useMediaStore from '../../stores/useMediaStore';
+import BridgeStatus from '../BridgeStatus';
+import DarkroomLogo from '../DarkroomLogo';
 
 const TitleBar = () => {
     const { fullscreenMode, currentFolder, setCurrentFolder, setExplorerSearchQuery } = useMediaStore();
@@ -15,7 +17,7 @@ const TitleBar = () => {
             style={{ WebkitAppRegion: 'drag', flexShrink: 0 }}
         >
             <div className="flex items-center px-3 gap-2 pointer-events-none w-1/4">
-                <img src="./icon.png" alt="Icon" className="w-3.5 h-3.5 object-contain opacity-70" onError={(e) => e.target.style.display = 'none'} />
+                <DarkroomLogo size={14} />
                 <span className="font-bold tracking-widest uppercase text-[10px] truncate">MMMedia Darkroom</span>
             </div>
             
@@ -50,7 +52,9 @@ const TitleBar = () => {
                 </div>
             </div>
             
-            <div className="flex h-full w-1/4 justify-end shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
+            <div className="flex h-full w-1/4 justify-end shrink-0 items-center gap-1" style={{ WebkitAppRegion: 'no-drag' }}>
+                {/* Pro Bridge Status */}
+                <BridgeStatus compact />
                 <button 
                     onClick={() => window.electronAPI?.minimize()}
                     className="h-full px-4 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center pointer-events-auto"

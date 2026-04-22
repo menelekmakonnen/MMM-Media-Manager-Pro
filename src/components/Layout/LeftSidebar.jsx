@@ -168,7 +168,8 @@ const LeftSidebar = () => {
         explorerSearchQuery, setExplorerSearchQuery,
         isScanning, scannedCount, startScan,
         theme, setTheme, themeMode, toggleThemeMode,
-        excludedFolders, excludedItems, clearExclusions
+        excludedFolders, excludedItems, clearExclusions,
+        aspectRatioFilters, toggleAspectRatioFilter
     } = useMediaStore();
 
 
@@ -382,6 +383,55 @@ const LeftSidebar = () => {
                     })}
                 </div>
 
+                {/* Aspect Ratio Filter Toggles */}
+                <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 mx-0.5 gap-0.5">
+                    {[
+                        { id: 'horizontal', label: 'Wide', color: 'blue', svgIcon: (active) => (
+                            <svg viewBox="0 0 20 14" className={clsx("w-4 h-3 transition-all duration-300", active ? "scale-110" : "opacity-60 group-hover/arf:opacity-100 group-hover/arf:scale-105")}>
+                                <rect x="1" y="1" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" className={active ? "opacity-100" : "opacity-60"} />
+                                <line x1="5" y1="7" x2="15" y2="7" stroke="currentColor" strokeWidth="1" className="opacity-40" />
+                                <polygon points="14,4.5 17,7 14,9.5" fill="currentColor" className="opacity-50" />
+                                <polygon points="6,4.5 3,7 6,9.5" fill="currentColor" className="opacity-50" />
+                            </svg>
+                        )},
+                        { id: 'vertical', label: 'Tall', color: 'rose', svgIcon: (active) => (
+                            <svg viewBox="0 0 14 20" className={clsx("w-3 h-4 transition-all duration-300", active ? "scale-110" : "opacity-60 group-hover/arf:opacity-100 group-hover/arf:scale-105")}>
+                                <rect x="1" y="1" width="12" height="18" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" className={active ? "opacity-100" : "opacity-60"} />
+                                <line x1="7" y1="5" x2="7" y2="15" stroke="currentColor" strokeWidth="1" className="opacity-40" />
+                                <polygon points="4.5,6 7,3 9.5,6" fill="currentColor" className="opacity-50" />
+                                <polygon points="4.5,14 7,17 9.5,14" fill="currentColor" className="opacity-50" />
+                            </svg>
+                        )},
+                        { id: 'square', label: 'Sq', color: 'violet', svgIcon: (active) => (
+                            <svg viewBox="0 0 16 16" className={clsx("w-3.5 h-3.5 transition-all duration-300", active ? "scale-110" : "opacity-60 group-hover/arf:opacity-100 group-hover/arf:scale-105")}>
+                                <rect x="1" y="1" width="14" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" className={active ? "opacity-100" : "opacity-60"} />
+                                <line x1="4" y1="4" x2="12" y2="12" stroke="currentColor" strokeWidth="0.8" className="opacity-30" />
+                                <line x1="12" y1="4" x2="4" y2="12" stroke="currentColor" strokeWidth="0.8" className="opacity-30" />
+                            </svg>
+                        )}
+                    ].map(orient => {
+                        const isActive = aspectRatioFilters.includes(orient.id);
+                        const colorMap = {
+                            blue: isActive ? "bg-blue-500/30 text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.3)] border-blue-500/40" : "text-blue-400/30 hover:text-blue-400 hover:bg-blue-500/10 border-transparent",
+                            rose: isActive ? "bg-rose-500/30 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.3)] border-rose-500/40" : "text-rose-400/30 hover:text-rose-400 hover:bg-rose-500/10 border-transparent",
+                            violet: isActive ? "bg-violet-500/30 text-violet-300 shadow-[0_0_10px_rgba(139,92,246,0.3)] border-violet-500/40" : "text-violet-400/30 hover:text-violet-400 hover:bg-violet-500/10 border-transparent"
+                        };
+                        return (
+                            <button
+                                key={orient.id}
+                                onClick={() => toggleAspectRatioFilter(orient.id)}
+                                className={clsx(
+                                    "group/arf flex-1 flex flex-col items-center py-1.5 rounded-md transition-all active:scale-95 border",
+                                    colorMap[orient.color]
+                                )}
+                                title={`${isActive ? 'Hide' : 'Show'} ${orient.id} media`}
+                            >
+                                {orient.svgIcon(isActive)}
+                                <span className="text-[7px] font-bold uppercase tracking-tighter mt-0.5">{orient.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
 
 
                 <div className="flex items-center justify-between gap-1 bg-white/5 p-1 rounded-lg border border-white/5 mx-0.5">
